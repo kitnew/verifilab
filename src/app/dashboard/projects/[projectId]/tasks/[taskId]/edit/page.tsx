@@ -1,0 +1,30 @@
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { notFound } from "next/navigation";
+import { TaskForm } from "@/components/task-form";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { prisma } from "@/lib/prisma";
+import type { TaskInput } from "@/lib/validation";
+
+export default async function EditTaskPage({ params }: { params: Promise<{ projectId: string; taskId: string }> }) {
+  const { projectId, taskId } = await params;
+  const task = await prisma.task.findFirst({ where: { id: taskId, projectId } });
+  if (!task) notFound();
+  const config = task.verifierConfig && typeof task.verifierConfig === "object" && !Array.isArray(task.verifierConfig) ? task.verifierConfig : {};
+  const tags = Array.isArray(task.tags) ? task.tags.filter((tag): tag is string => typeof tag === "string").join(", ") : "";
+  const initialValues: TaskInput = {
+    title: task.title,
+    prompt: task.prompt,
+    verifierType: task.verifierType,
+    difficulty: task.difficulty,
+    status: task.status,
+    tags,
+    expectedText: typeof config.expected === "string" ? config.expected : "",
+    expectedNumber: typeof config.expected === "number" ? String(config.expected) : "",
+    tolerance: typeof config.tolerance === "number" ? String(config.tolerance) : "0",
+    pattern: typeof config.pattern === "string" ? config.pattern : "",
+    flags: typeof config.flags === "string" ? config.flags : "",
+  };
+
+  return <div className="mx-auto max-w-3xl"><Link href={`/dashboard/projects/${projectId}/tasks/${taskId}`} className="mb-6 inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />Back to task</Link><Card><CardHeader><h1 className="text-2xl font-bold text-slate-950">Edit task</h1><p className="mt-1 text-sm text-slate-500">Update task content and verifier settings.</p></CardHeader><CardContent><TaskForm projectId={projectId} taskId={taskId} initialValues={initialValues} /></CardContent></Card></div>;
+}

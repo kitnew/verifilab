@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum VerifierType {
+  EXACT_MATCH
+  NUMERIC
+  REGEX
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum TaskStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  name        String
+  description String       @default("")
+  tasks       Task[]
+  datasets    Dataset[]
+  auditEvents AuditEvent[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Task {
+  id               String            @id @default(cuid())
+  projectId        String
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  prompt           String
+  verifierType     VerifierType
+  verifierConfig   Json
+  difficulty       Difficulty
+  status           TaskStatus        @default(DRAFT)
+  tags             Json
+  verificationRuns VerificationRun[]
+  reviewComments   ReviewComment[]
+  datasetItems     DatasetItem[]
+  auditEvents      AuditEvent[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([projectId])
+}
+
+model VerificationRun {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  candidate String
+  passed    Boolean
+  details   Json
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model ReviewComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Dataset {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String        @default("")
+  items       DatasetItem[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([projectId])
+}
+
+model DatasetItem {
+  id        String  @id @default(cuid())
+  datasetId String
+  dataset   Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  position  Int
+
+  @@unique([datasetId, taskId])
+  @@unique([datasetId, position])
+  @@index([taskId])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  action    String
+  metadata  Json
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([taskId])
+}
