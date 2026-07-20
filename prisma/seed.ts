@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { normalizeVerifierSnapshot } from "../src/lib/verifier-version";
 
 const prisma = new PrismaClient();
 
@@ -68,6 +69,17 @@ async function main() {
     prisma.task.findFirstOrThrow({ where: { projectId: stem.id, title: "ISO date extraction" } }),
     prisma.task.findFirstOrThrow({ where: { projectId: stem.id, title: "Structured final answer" } }),
   ]);
+
+  await prisma.verifierVersion.createMany({ data: [numericTask, exactTask, regexTask, jsonTask].map((task) => {
+    const snapshot = normalizeVerifierSnapshot(task);
+    return {
+      taskId: task.id,
+      version: 1,
+      verifierType: snapshot.verifierType,
+      verifierConfig: snapshot.verifierConfig as Prisma.InputJsonValue,
+      changeSummary: "Initial version",
+    };
+  }) });
 
   await prisma.evaluationBatch.create({ data: {
     taskId: numericTask.id, name: "Numeric calibration", description: "Mixed numeric responses imported from JSONL.", status: "COMPLETED", sourceType: "JSONL", modelName: "demo-math-model", modelVersion: "v1", temperature: 0.2, seed: 42,

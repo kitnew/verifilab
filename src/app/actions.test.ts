@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  findFirstTask: vi.fn(),
+  projectFindUnique: vi.fn(),
   findManyTasks: vi.fn(),
   createTask: vi.fn(),
   updateTask: vi.fn(),
@@ -11,27 +13,32 @@ const mocks = vi.hoisted(() => ({
   createAudit: vi.fn(),
   createComment: vi.fn(),
   createRun: vi.fn(),
+  findVerifierVersion: vi.fn(),
+  createVerifierVersion: vi.fn(),
   transaction: vi.fn(),
   getDemoRole: vi.fn().mockResolvedValue("REVIEWER"),
   revalidatePath: vi.fn(),
+  redirect: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-role", getDemoRole: mocks.getDemoRole }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    task: { findUnique: mocks.findUnique, findMany: mocks.findManyTasks, create: mocks.createTask, update: mocks.updateTask, delete: mocks.deleteTask },
+    project: { findUnique: mocks.projectFindUnique },
+    task: { findUnique: mocks.findUnique, findFirst: mocks.findFirstTask, findMany: mocks.findManyTasks, create: mocks.createTask, update: mocks.updateTask, delete: mocks.deleteTask },
     dataset: { findUnique: mocks.findDataset },
     datasetItem: { create: mocks.createDatasetItem },
     auditEvent: { create: mocks.createAudit },
     reviewComment: { create: mocks.createComment },
     verificationRun: { create: mocks.createRun },
+    verifierVersion: { findFirst: mocks.findVerifierVersion, create: mocks.createVerifierVersion },
     $transaction: mocks.transaction,
   },
 }));
 
-import { bulkTaskAction, changeTaskStatus, duplicateTask, runVerification } from "./actions";
+import { bulkTaskAction, changeTaskStatus, createTask, duplicateTask, restoreVerifierVersion, runVerification, updateTask } from "./actions";
 
 describe("runVerification", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -40,8 +47,7 @@ describe("runVerification", () => {
     mocks.findUnique.mockResolvedValue({
       id: "task-1",
       projectId: "project-1",
-      verifierType: "EXACT_MATCH",
-      verifierConfig: { expected: "Bucharest", caseSensitive: false, trimWhitespace: true },
+      verifierVersions: [{ id: "version-1", version: 1, verifierType: "EXACT_MATCH", verifierConfig: { expected: "Bucharest", caseSensitive: false, trimWhitespace: true } }],
     });
     mocks.createRun.mockResolvedValue({ id: "run-1" });
 
@@ -49,7 +55,7 @@ describe("runVerification", () => {
 
     expect(response.result).toMatchObject({ passed: true, reward: 1, normalizedCandidate: "bucharest" });
     expect(mocks.createRun).toHaveBeenCalledWith({
-      data: expect.objectContaining({ taskId: "task-1", candidate: " bucharest ", passed: true }),
+      data: expect.objectContaining({ taskId: "task-1", verifierVersionId: "version-1", candidate: " bucharest ", passed: true }),
     });
     expect(mocks.createAudit).toHaveBeenCalledWith({
       data: expect.objectContaining({ projectId: "project-1", taskId: "task-1", action: "VERIFICATION_EXECUTED", metadata: expect.objectContaining({ passed: true, reward: 1 }) }),
@@ -67,8 +73,7 @@ describe("runVerification", () => {
     mocks.findUnique.mockResolvedValue({
       id: "task-1",
       projectId: "project-1",
-      verifierType: "REGEX",
-      verifierConfig: { pattern: "[", flags: "" },
+      verifierVersions: [{ id: "version-1", version: 1, verifierType: "REGEX", verifierConfig: { pattern: "[", flags: "" } }],
     });
 
     expect(await runVerification("task-1", "candidate")).toEqual({
@@ -81,8 +86,7 @@ describe("runVerification", () => {
     mocks.findUnique.mockResolvedValue({
       id: "task-1",
       projectId: "project-1",
-      verifierType: "NUMERIC",
-      verifierConfig: { expected: 42, tolerance: 0 },
+      verifierVersions: [{ id: "version-1", version: 1, verifierType: "NUMERIC", verifierConfig: { expected: 42, tolerance: 0 } }],
     });
     mocks.transaction.mockRejectedValueOnce(new Error("database unavailable"));
 
@@ -90,10 +94,104 @@ describe("runVerification", () => {
       error: "Verification ran, but the result could not be saved.",
     });
   });
+
+  it("keeps each run linked to the active version used at execution time", async () => {
+    mocks.findUnique
+      .mockResolvedValueOnce({ id: "task-1", projectId: "project-1", verifierVersions: [{ id: "version-1", version: 1, verifierType: "NUMERIC", verifierConfig: { expected: 1, tolerance: 0 } }] })
+      .mockResolvedValueOnce({ id: "task-1", projectId: "project-1", verifierVersions: [{ id: "version-2", version: 2, verifierType: "NUMERIC", verifierConfig: { expected: 2, tolerance: 0 } }] });
+
+    await runVerification("task-1", "1");
+    await runVerification("task-1", "2");
+
+    expect(mocks.createRun.mock.calls.map(([call]) => call.data.verifierVersionId)).toEqual(["version-1", "version-2"]);
+  });
+});
+
+describe("verifier version actions", () => {
+  const input = {
+    title: "Numeric evaluation",
+    prompt: "Return the final numeric value.",
+    verifierType: "NUMERIC" as const,
+    difficulty: "MEDIUM" as const,
+    status: "DRAFT" as const,
+    tags: "math",
+    expectedText: "",
+    expectedNumber: "42",
+    tolerance: "0",
+    pattern: "",
+    flags: "",
+    jsonSchema: "",
+    changeSummary: "Tighten expected result",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getDemoRole.mockResolvedValue("AUTHOR");
+    mocks.transaction.mockResolvedValue([]);
+  });
+
+  it("creates version 1 with a new task", async () => {
+    mocks.projectFindUnique.mockResolvedValue({ id: "project-1" });
+    mocks.createTask.mockResolvedValue({ id: "task-1" });
+
+    await createTask("project-1", input);
+
+    expect(mocks.createTask).toHaveBeenCalledWith({ data: expect.objectContaining({
+      verifierVersions: { create: { version: 1, verifierType: "NUMERIC", verifierConfig: { expected: 42, tolerance: 0 }, changeSummary: "Initial version" } },
+    }) });
+  });
+
+  it("creates the next sequential version for a material edit", async () => {
+    mocks.findFirstTask.mockResolvedValue({ id: "task-1", verifierVersions: [{ id: "version-2", version: 2, verifierType: "NUMERIC", verifierConfig: { expected: 41, tolerance: 0 } }] });
+
+    await updateTask("task-1", "project-1", input);
+
+    expect(mocks.updateTask).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({
+      verifierVersions: { create: { version: 3, verifierType: "NUMERIC", verifierConfig: { expected: 42, tolerance: 0 }, changeSummary: "Tighten expected result" } },
+    }) });
+  });
+
+  it("does not create a version for a normalized no-op edit", async () => {
+    mocks.findFirstTask.mockResolvedValue({ id: "task-1", verifierVersions: [{ id: "version-2", version: 2, verifierType: "NUMERIC", verifierConfig: { tolerance: 0, expected: 42 } }] });
+
+    await updateTask("task-1", "project-1", input);
+
+    expect(mocks.updateTask.mock.calls[0][0].data).not.toHaveProperty("verifierVersions");
+    expect(mocks.createAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores a frozen historical snapshot by creating a new version", async () => {
+    const source = Object.freeze({ id: "version-1", taskId: "task-1", version: 1, verifierType: "REGEX" as const, verifierConfig: Object.freeze({ pattern: "^yes$", flags: "i" }) });
+    mocks.findVerifierVersion.mockResolvedValueOnce(source).mockResolvedValueOnce({ id: "version-3", version: 3 });
+
+    expect(await restoreVerifierVersion("task-1", "project-1", "version-1")).toEqual({});
+
+    expect(mocks.createVerifierVersion).toHaveBeenCalledWith({ data: { taskId: "task-1", version: 4, verifierType: "REGEX", verifierConfig: { flags: "i", pattern: "^yes$" }, changeSummary: "Restored from version 1" } });
+    expect(source.version).toBe(1);
+  });
+
+  it("rejects an invalid historical configuration before restoration writes", async () => {
+    mocks.findVerifierVersion
+      .mockResolvedValueOnce({ id: "version-1", taskId: "task-1", version: 1, verifierType: "REGEX", verifierConfig: { pattern: "[", flags: "" } })
+      .mockResolvedValueOnce({ id: "version-2", version: 2 });
+
+    expect(await restoreVerifierVersion("task-1", "project-1", "version-1")).toEqual({ error: "This verifier version has an invalid configuration." });
+    expect(mocks.createVerifierVersion).not.toHaveBeenCalled();
+    expect(mocks.updateTask).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid edits before reading or writing versions", async () => {
+    expect(await updateTask("task-1", "project-1", { ...input, verifierType: "REGEX", pattern: "[" })).toMatchObject({ error: "Please fix the highlighted fields." });
+    expect(mocks.findFirstTask).not.toHaveBeenCalled();
+    expect(mocks.updateTask).not.toHaveBeenCalled();
+  });
 });
 
 describe("changeTaskStatus", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getDemoRole.mockResolvedValue("REVIEWER");
+  });
 
   it("persists an approval comment in the review timeline", async () => {
     mocks.findUnique.mockResolvedValue({ id: "task-1", projectId: "project-1", status: "IN_REVIEW" });
@@ -130,10 +228,14 @@ describe("duplicateTask", () => {
       prompt: "Prompt",
       verifierType: "REGEX",
       verifierConfig: { pattern: "^yes$", flags: "i" },
+      verifierVersions: { create: { version: 1, verifierType: "REGEX", verifierConfig: { pattern: "^yes$", flags: "i" }, changeSummary: "Initial version" } },
       difficulty: "HARD",
       status: "DRAFT",
       tags: ["logic"],
-      auditEvents: { create: { projectId: "project-1", action: "TASK_DUPLICATED", metadata: { sourceTaskId: "task-1" } } },
+      auditEvents: { create: [
+        { projectId: "project-1", action: "TASK_DUPLICATED", metadata: { sourceTaskId: "task-1" } },
+        { projectId: "project-1", action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
+      ] },
     } });
   });
 });

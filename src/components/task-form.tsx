@@ -18,7 +18,7 @@ export function TaskForm({ projectId, taskId, initialValues }: { projectId: stri
     resolver: zodResolver(taskSchema),
     defaultValues: initialValues ?? {
       title: "", prompt: "", verifierType: "EXACT_MATCH", difficulty: "MEDIUM", status: "DRAFT",
-      tags: "", expectedText: "", expectedNumber: "", tolerance: "0", pattern: "", flags: "", jsonSchema: "",
+      tags: "", expectedText: "", expectedNumber: "", tolerance: "0", pattern: "", flags: "", jsonSchema: "", changeSummary: "",
     },
   });
   const verifierType = useWatch({ control, name: "verifierType" });
@@ -51,6 +51,8 @@ export function TaskForm({ projectId, taskId, initialValues }: { projectId: stri
         {verifierType === "REGEX" && <div className="grid gap-5 sm:grid-cols-[1fr_140px]"><Field label="Pattern" error={errors.pattern?.message}><Input {...register("pattern")} className="font-mono" /></Field><Field label="Flags" error={errors.flags?.message}><Input {...register("flags")} placeholder="i" className="font-mono" /></Field></div>}
         {verifierType === "JSON_SCHEMA" && <Field label="JSON Schema" error={errors.jsonSchema?.message}><Textarea {...register("jsonSchema")} className="min-h-64 font-mono" placeholder={'{"type":"object","required":["answer"]}'} /></Field>}
       </div>
+
+      {taskId && <Field label="Verifier change summary (optional)" error={errors.changeSummary?.message}><Input {...register("changeSummary")} placeholder="Why did the verifier change?" /></Field>}
 
       {serverError && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{serverError}</p>}
       <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Saving…" : taskId ? "Save changes" : "Create task"}</Button>
