@@ -2,6 +2,8 @@ const labels: Record<string, string> = {
   PROJECT_CREATED: "Project created",
   TASK_CREATED: "Task created",
   TASK_UPDATED: "Task updated",
+  VERIFIER_VERSION_CREATED: "Verifier version created",
+  VERIFIER_VERSION_RESTORED: "Verifier version restored",
   TASK_DUPLICATED: "Task duplicated",
   VERIFICATION_EXECUTED: "Verification executed",
   TASK_SUBMIT: "Review submitted",
@@ -29,6 +31,8 @@ export function auditLabel(action: string) {
 export function auditDetail(action: string, value: unknown) {
   const metadata = object(value);
   if (action === "VERIFICATION_EXECUTED") return `${metadata.passed ? "PASS" : "FAIL"} · reward ${number(metadata.reward)} · ${number(metadata.executionTimeMs).toFixed(3)} ms`;
+  if (action === "VERIFIER_VERSION_CREATED") return `Version ${number(metadata.version)}`;
+  if (action === "VERIFIER_VERSION_RESTORED") return `Version ${number(metadata.version)} from version ${number(metadata.sourceVersion)}`;
   if (action === "DATASET_CREATED") return string(metadata.datasetName);
   if (action === "TASK_ADDED_TO_DATASET") return `Added to ${string(metadata.datasetName)}`;
   if (action === "DATASET_EXPORTED") return `${string(metadata.datasetName)} · ${string(metadata.format).toUpperCase()}`;

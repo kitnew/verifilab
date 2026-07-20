@@ -11,4 +11,9 @@ describe("audit display", () => {
     expect(auditLabel("TASK_TAGS_ADDED")).toBe("Task tags added");
     expect(auditDetail("DATASET_EXPORTED", null)).toBe("Unknown · UNKNOWN");
   });
+
+  it("formats verifier version audit events", () => {
+    expect(auditLabel("VERIFIER_VERSION_CREATED")).toBe("Verifier version created");
+    expect(auditDetail("VERIFIER_VERSION_RESTORED", { version: 4, sourceVersion: 1 })).toBe("Version 4 from version 1");
+  });
 });

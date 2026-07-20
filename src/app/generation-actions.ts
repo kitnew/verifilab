@@ -63,6 +63,7 @@ export async function persistGeneratedTasks(input: unknown): Promise<GenerationA
       prompt: task.prompt,
       verifierType: task.verifierType,
       verifierConfig: task.verifierConfig as Prisma.InputJsonValue,
+      verifierVersions: { create: { version: 1, verifierType: task.verifierType, verifierConfig: task.verifierConfig as Prisma.InputJsonValue, changeSummary: "Initial version" } },
       expectedAnswer: task.expectedAnswer,
       difficulty: task.difficulty,
       status: "DRAFT",
@@ -72,7 +73,10 @@ export async function persistGeneratedTasks(input: unknown): Promise<GenerationA
       generationSeed: task.seed,
       generationBatchId: job.id,
       generationFingerprint: generationFingerprint(task),
-      auditEvents: { create: { projectId: job.projectId, action: "TASK_CREATED", metadata: { generationBatchId: job.id, generatorTemplate: job.generatorType } } },
+      auditEvents: { create: [
+        { projectId: job.projectId, action: "TASK_CREATED", metadata: { generationBatchId: job.id, generatorTemplate: job.generatorType } },
+        { projectId: job.projectId, action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
+      ] },
     } })));
   } catch {
     return { error: "Could not save generated tasks. Duplicate checks were repeated; please try again." };

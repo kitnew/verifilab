@@ -62,6 +62,7 @@ export const taskSchema = z
     pattern: z.string().max(2_000).default(""),
     flags: z.string().regex(/^[dgimsuvy]*$/, "Use valid JavaScript regex flags only").default(""),
     jsonSchema: z.string().max(20_000, "JSON Schema is too long").default(""),
+    changeSummary: z.string().trim().max(500, "Change summary is too long").default(""),
   })
   .superRefine((value, ctx) => {
     if (value.verifierType === "EXACT_MATCH" && !value.expectedText.trim()) {

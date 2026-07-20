@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { can, reviewTransition, roles, type ReviewAction, type Role } from "@/lib/review";
 import { candidateSchema, projectSchema, reviewCommentSchema, storedVerifierSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
 import { verify, type VerificationResult } from "@/lib/verifier";
+import { normalizeVerifierSnapshot, verifierChanged } from "@/lib/verifier-version";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 export type BulkTaskOperation = "SUBMIT" | "ADD_TAGS" | "DELETE_DRAFTS" | "ADD_TO_DATASET";
@@ -63,11 +64,16 @@ export async function createTask(projectId: string, input: TaskInput): Promise<A
 
   let task;
   try {
+    const data = toTaskData(parsed.data);
     task = await prisma.task.create({
       data: {
         projectId,
-        ...toTaskData(parsed.data),
-        auditEvents: { create: { projectId, action: "TASK_CREATED", metadata: {} } },
+        ...data,
+        verifierVersions: { create: { version: 1, verifierType: data.verifierType, verifierConfig: data.verifierConfig, changeSummary: "Initial version" } },
+        auditEvents: { create: [
+          { projectId, action: "TASK_CREATED", metadata: {} },
+          { projectId, action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
+        ] },
       },
     });
   } catch {
@@ -84,13 +90,30 @@ export async function updateTask(taskId: string, projectId: string, input: TaskI
   const parsed = taskSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
-  const task = await prisma.task.findFirst({ where: { id: taskId, projectId }, select: { id: true } });
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, projectId },
+    select: { id: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } },
+  });
   if (!task) return { error: "Task not found." };
+  const active = task.verifierVersions[0];
+  if (!active) return { error: "Task has no verifier version." };
+  const data = toTaskData(parsed.data);
+  const next = normalizeVerifierSnapshot({ verifierType: data.verifierType, verifierConfig: data.verifierConfig });
+  let changed = true;
+  try {
+    changed = verifierChanged(active, next);
+  } catch {
+    // A valid edit must be able to replace an invalid legacy snapshot.
+  }
 
   try {
     await prisma.$transaction([
-      prisma.task.update({ where: { id: taskId }, data: toTaskData(parsed.data) }),
+      prisma.task.update({ where: { id: taskId }, data: {
+        ...data,
+        ...(changed ? { verifierVersions: { create: { version: active.version + 1, verifierType: next.verifierType, verifierConfig: next.verifierConfig as Prisma.InputJsonValue, changeSummary: parsed.data.changeSummary || null } } } : {}),
+      } }),
       prisma.auditEvent.create({ data: { projectId, taskId, action: "TASK_UPDATED", metadata: {} } }),
+      ...(changed ? [prisma.auditEvent.create({ data: { projectId, taskId, action: "VERIFIER_VERSION_CREATED", metadata: { version: active.version + 1, previousVersion: active.version } } })] : []),
     ]);
   } catch {
     return { error: "Could not update the task. Please try again." };
@@ -109,6 +132,12 @@ export async function duplicateTask(taskId: string): Promise<ActionResult> {
     select: { projectId: true, title: true, prompt: true, verifierType: true, verifierConfig: true, difficulty: true, tags: true },
   });
   if (!source) return { error: "Task not found." };
+  let snapshot;
+  try {
+    snapshot = normalizeVerifierSnapshot(source);
+  } catch {
+    return { error: "This task has an invalid verifier configuration." };
+  }
 
   let duplicate;
   try {
@@ -117,12 +146,16 @@ export async function duplicateTask(taskId: string): Promise<ActionResult> {
         projectId: source.projectId,
         title: `Copy of ${source.title}`,
         prompt: source.prompt,
-        verifierType: source.verifierType,
-        verifierConfig: source.verifierConfig as Prisma.InputJsonValue,
+        verifierType: snapshot.verifierType,
+        verifierConfig: snapshot.verifierConfig as Prisma.InputJsonValue,
+        verifierVersions: { create: { version: 1, verifierType: snapshot.verifierType, verifierConfig: snapshot.verifierConfig as Prisma.InputJsonValue, changeSummary: "Initial version" } },
         difficulty: source.difficulty,
         status: "DRAFT",
         tags: source.tags as Prisma.InputJsonValue,
-        auditEvents: { create: { projectId: source.projectId, action: "TASK_DUPLICATED", metadata: { sourceTaskId: taskId } } },
+        auditEvents: { create: [
+          { projectId: source.projectId, action: "TASK_DUPLICATED", metadata: { sourceTaskId: taskId } },
+          { projectId: source.projectId, action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
+        ] },
       },
     });
   } catch {
@@ -233,11 +266,13 @@ export async function runVerification(taskId: string, candidate: string): Promis
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, projectId: true, verifierType: true, verifierConfig: true },
+    select: { id: true, projectId: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } },
   });
   if (!task) return { error: "Task not found." };
+  const active = task.verifierVersions[0];
+  if (!active) return { error: "Task has no verifier version." };
 
-  const parsedVerifier = storedVerifierSchema.safeParse({ type: task.verifierType, config: task.verifierConfig });
+  const parsedVerifier = storedVerifierSchema.safeParse({ type: active.verifierType, config: active.verifierConfig });
   if (!parsedVerifier.success) return { error: "This task has an invalid verifier configuration." };
 
   const result = verify(parsedCandidate.data, parsedVerifier.data);
@@ -251,8 +286,8 @@ export async function runVerification(taskId: string, candidate: string): Promis
 
   try {
     await prisma.$transaction([
-      prisma.verificationRun.create({ data: { taskId, candidate: parsedCandidate.data, passed: result.passed, details } }),
-      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: "VERIFICATION_EXECUTED", metadata: { passed: result.passed, reward: result.reward, executionTimeMs: result.executionTimeMs } } }),
+      prisma.verificationRun.create({ data: { taskId, verifierVersionId: active.id, candidate: parsedCandidate.data, passed: result.passed, details } }),
+      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: "VERIFICATION_EXECUTED", metadata: { passed: result.passed, reward: result.reward, executionTimeMs: result.executionTimeMs, verifierVersion: active.version } } }),
     ]);
   } catch {
     return { error: "Verification ran, but the result could not be saved." };
@@ -262,6 +297,38 @@ export async function runVerification(taskId: string, candidate: string): Promis
   revalidatePath(`/dashboard/projects/${task.projectId}`);
   revalidatePath("/dashboard/activity");
   return { result };
+}
+
+export async function restoreVerifierVersion(taskId: string, projectId: string, verifierVersionId: string): Promise<ActionResult> {
+  if (!can(await getDemoRole(), "EDIT_TASK")) return { error: "Your demo role cannot restore verifier versions." };
+  const [source, active] = await Promise.all([
+    prisma.verifierVersion.findFirst({ where: { id: verifierVersionId, taskId, task: { projectId } } }),
+    prisma.verifierVersion.findFirst({ where: { taskId, task: { projectId } }, orderBy: { version: "desc" } }),
+  ]);
+  if (!source || !active) return { error: "Verifier version not found." };
+  if (source.version >= active.version) return { error: "Only a historical verifier version can be restored." };
+
+  let snapshot;
+  try {
+    snapshot = normalizeVerifierSnapshot(source);
+  } catch {
+    return { error: "This verifier version has an invalid configuration." };
+  }
+  const version = active.version + 1;
+  try {
+    await prisma.$transaction([
+      prisma.task.update({ where: { id: taskId }, data: { verifierType: snapshot.verifierType, verifierConfig: snapshot.verifierConfig as Prisma.InputJsonValue } }),
+      prisma.verifierVersion.create({ data: { taskId, version, verifierType: snapshot.verifierType, verifierConfig: snapshot.verifierConfig as Prisma.InputJsonValue, changeSummary: `Restored from version ${source.version}` } }),
+      prisma.auditEvent.create({ data: { projectId, taskId, action: "VERIFIER_VERSION_RESTORED", metadata: { version, sourceVersion: source.version } } }),
+    ]);
+  } catch {
+    return { error: "Could not restore the verifier version. Refresh and try again." };
+  }
+
+  revalidatePath(`/dashboard/projects/${projectId}/tasks/${taskId}`);
+  revalidatePath(`/dashboard/projects/${projectId}/tasks/${taskId}/edit`);
+  revalidatePath("/dashboard/activity");
+  return {};
 }
 
 export async function setDemoRole(value: Role): Promise<ActionResult> {

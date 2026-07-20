@@ -99,6 +99,7 @@ model Task {
   generationJob         GenerationJob?    @relation(fields: [generationBatchId], references: [id], onDelete: SetNull)
   generationFingerprint String?
   evaluationBatches     EvaluationBatch[]
+  verifierVersions      VerifierVersion[]
   verificationRuns      VerificationRun[]
   reviewComments        ReviewComment[]
   datasetItems          DatasetItem[]
@@ -109,6 +110,21 @@ model Task {
   @@unique([projectId, generationFingerprint])
   @@index([projectId])
   @@index([generationBatchId])
+}
+
+model VerifierVersion {
+  id               String            @id @default(cuid())
+  taskId           String
+  task             Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  version          Int
+  verifierType     VerifierType
+  verifierConfig   Json
+  changeSummary    String?
+  verificationRuns VerificationRun[]
+  createdAt        DateTime          @default(now())
+
+  @@unique([taskId, version])
+  @@index([taskId, createdAt])
 }
 
 model EvaluationBatch {
@@ -204,15 +220,18 @@ model GenerationJob {
 }
 
 model VerificationRun {
-  id        String   @id @default(cuid())
-  taskId    String
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  candidate String
-  passed    Boolean
-  details   Json
-  createdAt DateTime @default(now())
+  id                String          @id @default(cuid())
+  taskId            String
+  task              Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  verifierVersionId String
+  verifierVersion   VerifierVersion @relation(fields: [verifierVersionId], references: [id], onDelete: Cascade)
+  candidate         String
+  passed            Boolean
+  details           Json
+  createdAt         DateTime        @default(now())
 
   @@index([taskId])
+  @@index([verifierVersionId])
 }
 
 model ReviewComment {
