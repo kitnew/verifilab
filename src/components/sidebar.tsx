@@ -12,7 +12,7 @@ const links = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard", label: "Projects", icon: FolderKanban },
   { href: "/dashboard/review", label: "Review queue", icon: ClipboardCheck },
-  { href: "/dashboard", label: "Datasets", icon: Database, disabled: true },
+  { href: "/dashboard/datasets", label: "Datasets", icon: Database },
 ];
 
 export function Sidebar({ role }: { role: Role }) {
@@ -28,9 +28,9 @@ export function Sidebar({ role }: { role: Role }) {
         <span><strong className="block text-base">VerifiLab</strong><span className="text-xs text-slate-400">RLVR workspace</span></span>
       </Link>
       <nav className="space-y-1 p-4" aria-label="Primary navigation">
-        {links.map(({ href, label, icon: Icon, disabled }, index) => {
+        {links.map(({ href, label, icon: Icon }, index) => {
           const active = index === 0 ? pathname === "/dashboard" : href !== "/dashboard" && pathname.startsWith(href);
-          return <Link key={label} href={disabled ? "#" : href} aria-disabled={disabled} className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white", active && "bg-white/10 text-white", disabled && "pointer-events-none opacity-40")}><Icon className="size-4" />{label}{disabled && <span className="ml-auto text-[10px] uppercase">Soon</span>}</Link>;
+          return <Link key={label} href={href} className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white", active && "bg-white/10 text-white")}><Icon className="size-4" />{label}</Link>;
         })}
       </nav>
       <div className="mt-auto border-t border-white/10 p-4">
