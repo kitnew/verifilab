@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  createTask: vi.fn(),
   updateTask: vi.fn(),
   createAudit: vi.fn(),
   createComment: vi.fn(),
@@ -16,7 +17,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-role", getDemoRole: mocks.getDemoRole }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    task: { findUnique: mocks.findUnique, update: mocks.updateTask },
+    task: { findUnique: mocks.findUnique, create: mocks.createTask, update: mocks.updateTask },
     auditEvent: { create: mocks.createAudit },
     reviewComment: { create: mocks.createComment },
     verificationRun: { create: mocks.createRun },
@@ -24,7 +25,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { changeTaskStatus, runVerification } from "./actions";
+import { changeTaskStatus, duplicateTask, runVerification } from "./actions";
 
 describe("runVerification", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -93,5 +94,37 @@ describe("changeTaskStatus", () => {
     expect(mocks.createComment).toHaveBeenCalledWith({
       data: { taskId: "task-1", author: "Reviewer (demo)", body: "Looks good." },
     });
+  });
+});
+
+describe("duplicateTask", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("creates an isolated draft copy with an audit event", async () => {
+    mocks.getDemoRole.mockResolvedValue("AUTHOR");
+    mocks.findUnique.mockResolvedValue({
+      projectId: "project-1",
+      title: "Original",
+      prompt: "Prompt",
+      verifierType: "REGEX",
+      verifierConfig: { pattern: "^yes$", flags: "i" },
+      difficulty: "HARD",
+      tags: ["logic"],
+    });
+    mocks.createTask.mockResolvedValue({ id: "task-copy" });
+
+    await duplicateTask("task-1");
+
+    expect(mocks.createTask).toHaveBeenCalledWith({ data: {
+      projectId: "project-1",
+      title: "Copy of Original",
+      prompt: "Prompt",
+      verifierType: "REGEX",
+      verifierConfig: { pattern: "^yes$", flags: "i" },
+      difficulty: "HARD",
+      status: "DRAFT",
+      tags: ["logic"],
+      auditEvents: { create: { projectId: "project-1", action: "TASK_DUPLICATED", metadata: { sourceTaskId: "task-1" } } },
+    } });
   });
 });

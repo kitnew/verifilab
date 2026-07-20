@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DeleteTaskButton } from "@/components/delete-task-button";
+import { DuplicateTaskButton } from "@/components/duplicate-task-button";
 import { ReviewControls } from "@/components/review-controls";
 import { VerificationPlayground } from "@/components/verification-playground";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
       <Link href={`/dashboard/projects/${projectId}`} className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />{task.project.name}</Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div><div className="mb-3 flex flex-wrap items-center gap-2"><Badge>{task.status}</Badge><span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label(task.difficulty)}</span></div><h1 className="text-3xl font-bold tracking-tight text-slate-950">{task.title}</h1><p className="mt-2 text-sm text-slate-500">Updated {task.updatedAt.toLocaleString()}</p></div>
-        {can(role, "EDIT_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/${taskId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit task</Link>}
+        <div className="flex gap-2">{can(role, "CREATE_TASK") && <DuplicateTaskButton taskId={taskId} />}{can(role, "EDIT_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/${taskId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit task</Link>}</div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">

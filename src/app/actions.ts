@@ -84,6 +84,37 @@ export async function updateTask(taskId: string, projectId: string, input: TaskI
   redirect(`/dashboard/projects/${projectId}/tasks/${taskId}`);
 }
 
+export async function duplicateTask(taskId: string): Promise<ActionResult> {
+  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot duplicate tasks." };
+  const source = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { projectId: true, title: true, prompt: true, verifierType: true, verifierConfig: true, difficulty: true, tags: true },
+  });
+  if (!source) return { error: "Task not found." };
+
+  let duplicate;
+  try {
+    duplicate = await prisma.task.create({
+      data: {
+        projectId: source.projectId,
+        title: `Copy of ${source.title}`,
+        prompt: source.prompt,
+        verifierType: source.verifierType,
+        verifierConfig: source.verifierConfig as Prisma.InputJsonValue,
+        difficulty: source.difficulty,
+        status: "DRAFT",
+        tags: source.tags as Prisma.InputJsonValue,
+        auditEvents: { create: { projectId: source.projectId, action: "TASK_DUPLICATED", metadata: { sourceTaskId: taskId } } },
+      },
+    });
+  } catch {
+    return { error: "Could not duplicate the task. Please try again." };
+  }
+
+  revalidatePath(`/dashboard/projects/${source.projectId}`);
+  redirect(`/dashboard/projects/${source.projectId}/tasks/${duplicate.id}`);
+}
+
 export async function deleteTask(taskId: string, projectId: string): Promise<ActionResult> {
   if (!can(await getDemoRole(), "DELETE_TASK")) return { error: "Your demo role cannot delete tasks." };
   const task = await prisma.task.findFirst({ where: { id: taskId, projectId }, select: { id: true } });
