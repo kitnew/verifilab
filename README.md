@@ -23,4 +23,8 @@ npm test
 npm run build
 ```
 
-The first slice supports project creation and task creation, viewing, editing, and deletion. Datasets, verification runs, and review comments are modeled but do not have UI workflows yet.
+## Evaluation execution architecture
+
+The local prototype evaluates bounded batches in-process and persists progress after each 25-result chunk. Batch and result status guards make retries idempotent and allow cancellation between chunks.
+
+Production replacement: `API → durable queue → verification workers → database/object storage`. Route and UI contracts can remain while workers claim queued batches from durable infrastructure. This prototype intentionally does not add Redis, queues, object storage, or external model inference.

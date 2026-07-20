@@ -43,6 +43,31 @@ enum GenerationJobStatus {
   CANCELLED
 }
 
+enum EvaluationBatchStatus {
+  DRAFT
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum EvaluationSourceType {
+  MANUAL
+  BULK_TEXT
+  JSONL
+  CSV
+}
+
+enum EvaluationResultStatus {
+  PENDING
+  RUNNING
+  PASSED
+  FAILED
+  INVALID
+  ERROR
+}
+
 model Project {
   id             String          @id @default(cuid())
   name           String
@@ -73,6 +98,7 @@ model Task {
   generationBatchId     String?
   generationJob         GenerationJob?    @relation(fields: [generationBatchId], references: [id], onDelete: SetNull)
   generationFingerprint String?
+  evaluationBatches     EvaluationBatch[]
   verificationRuns      VerificationRun[]
   reviewComments        ReviewComment[]
   datasetItems          DatasetItem[]
@@ -83,6 +109,77 @@ model Task {
   @@unique([projectId, generationFingerprint])
   @@index([projectId])
   @@index([generationBatchId])
+}
+
+model EvaluationBatch {
+  id                     String                @id @default(cuid())
+  taskId                 String
+  task                   Task                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  name                   String
+  description            String                @default("")
+  status                 EvaluationBatchStatus @default(DRAFT)
+  sourceType             EvaluationSourceType
+  modelName              String?
+  modelVersion           String?
+  temperature            Float?
+  topP                   Float?
+  seed                   Int?
+  requestedCount         Int
+  processedCount         Int                   @default(0)
+  passedCount            Int                   @default(0)
+  failedCount            Int                   @default(0)
+  importInvalidCount     Int                   @default(0)
+  invalidCount           Int                   @default(0)
+  errorCount             Int                   @default(0)
+  duplicateCount         Int                   @default(0)
+  progress               Int                   @default(0)
+  errorMessage           String?
+  taskTitleSnapshot      String
+  taskPromptSnapshot     String
+  verifierTypeSnapshot   VerifierType
+  verifierConfigSnapshot Json
+  taskUpdatedAtSnapshot  DateTime
+  importFingerprint      String?
+  createdBy              String?
+  results                EvaluationResult[]
+  startedAt              DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@unique([taskId, importFingerprint])
+  @@index([taskId, createdAt])
+  @@index([status, createdAt])
+  @@index([modelName])
+}
+
+model EvaluationResult {
+  id                  String                 @id @default(cuid())
+  evaluationBatchId   String
+  evaluationBatch     EvaluationBatch        @relation(fields: [evaluationBatchId], references: [id], onDelete: Cascade)
+  sequenceNumber      Int
+  candidateResponse   String
+  modelName           String?
+  modelVersion        String?
+  temperature         Float?
+  seed                Int?
+  externalId          String?
+  metadata            Json?
+  status              EvaluationResultStatus @default(PENDING)
+  passed              Boolean?
+  reward              Int?
+  details             String?
+  normalizedCandidate String?
+  executionTimeMs     Float?
+  errorMessage        String?
+  evaluatedAt         DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@unique([evaluationBatchId, sequenceNumber])
+  @@index([evaluationBatchId, status, sequenceNumber])
+  @@index([evaluationBatchId, reward])
+  @@index([externalId])
 }
 
 model GenerationJob {

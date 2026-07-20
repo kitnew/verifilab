@@ -1,0 +1,20 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { cancelEvaluationBatch, deleteEvaluationBatch, queueEvaluationBatch, rerunEvaluationResults, retryEvaluationBatch } from "@/app/evaluation-actions";
+import { Button, buttonVariants } from "@/components/ui/button";
+
+export function EvaluationBatchControls({ batchId, status, counts, exportStatus }: { batchId: string; status: string; counts: { total: number; failed: number; errors: number }; exportStatus?: string }) {
+  const router = useRouter(); const [error, setError] = useState(""); const [executing, setExecuting] = useState(false); const [pending, startTransition] = useTransition();
+  useEffect(() => { if (status !== "RUNNING" && status !== "QUEUED" && !executing) return; const timer = window.setInterval(() => router.refresh(), 1_000); return () => window.clearInterval(timer); }, [status, executing, router]);
+  async function execute() { setExecuting(true); try { const response = await fetch(`/api/evaluations/${batchId}/run`, { method: "POST" }); const result = await response.json() as { error?: string }; if (!response.ok) setError(result.error ?? "Evaluation failed."); } catch { setError("Could not run the evaluation."); } finally { setExecuting(false); router.refresh(); } }
+  function start() { setError(""); startTransition(async () => { const result = await queueEvaluationBatch(batchId); if (result.error) return setError(result.error); await execute(); }); }
+  function retry() { setError(""); startTransition(async () => { const result = await retryEvaluationBatch(batchId); if (result.error) return setError(result.error); await execute(); }); }
+  function cancel() { setError(""); startTransition(async () => { const result = await cancelEvaluationBatch(batchId); if (result.error) return setError(result.error); router.refresh(); }); }
+  function rerun(mode: "ALL" | "FAILED" | "ERROR", count: number) { if (!count || !window.confirm(`Rerun ${count} result(s) using the stored verifier snapshot?`)) return; setError(""); startTransition(async () => { const result = await rerunEvaluationResults({ batchId, mode }); if (result.error) return setError(result.error); await execute(); }); }
+  function remove() { if (!window.confirm("Delete this evaluation batch and all of its results? This cannot be undone.")) return; setError(""); startTransition(async () => { const result = await deleteEvaluationBatch(batchId); if (result.error) return setError(result.error); router.push("/dashboard/evaluations"); }); }
+  const query = exportStatus ? `&status=${exportStatus}` : "";
+  return <div className="space-y-3"><div className="flex flex-wrap gap-2">{status === "DRAFT" && <Button disabled={pending || executing} onClick={start}>{pending || executing ? "Starting…" : "Run evaluation"}</Button>}{(status === "RUNNING" || status === "QUEUED") && <Button variant="secondary" disabled={pending} onClick={cancel}>Cancel</Button>}{(status === "FAILED" || status === "CANCELLED") && <Button disabled={pending || executing} onClick={retry}>Retry interrupted batch</Button>}{status === "COMPLETED" && <><Button variant="secondary" disabled={pending || executing} onClick={() => rerun("ALL", counts.total)}>Rerun all</Button><Button variant="secondary" disabled={pending || executing || !counts.failed} onClick={() => rerun("FAILED", counts.failed)}>Rerun failed</Button><Button variant="secondary" disabled={pending || executing || !counts.errors} onClick={() => rerun("ERROR", counts.errors)}>Rerun errors</Button></>}<Link className={buttonVariants({ variant: "secondary" })} href={`/api/evaluations/${batchId}/export?format=jsonl${query}`}>Export JSONL</Link><Link className={buttonVariants({ variant: "secondary" })} href={`/api/evaluations/${batchId}/export?format=csv${query}`}>Export CSV</Link>{["DRAFT", "CANCELLED", "COMPLETED"].includes(status) && <Button variant="destructive" disabled={pending} onClick={remove}>Delete batch</Button>}</div>{error && <p className="text-sm text-red-700" role="alert">{error}</p>}</div>;
+}
