@@ -77,6 +77,7 @@ enum TaskImportFormat {
 enum TaskImportStatus {
   COMPLETED
   FAILED
+  ROLLED_BACK
 }
 
 model Project {
@@ -99,14 +100,18 @@ model TaskImport {
   filename       String
   format         TaskImportFormat
   status         TaskImportStatus
+  strategy       String
   totalCount     Int
   importedCount  Int
+  replacedCount  Int
   skippedCount   Int
   duplicateCount Int
   failedCount    Int
   rejectedRows   Json
+  changes        Json
   createdAt      DateTime         @default(now())
   completedAt    DateTime?
+  rolledBackAt   DateTime?
 
   @@index([projectId, createdAt])
 }

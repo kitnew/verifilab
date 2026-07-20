@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_TASK_IMPORT_BYTES, parseTaskImport, planTaskImport, validateTaskImportRow } from "./task-import";
+import { defaultColumnMapping, inspectTaskImport, MAX_TASK_IMPORT_BYTES, parseTaskImport, planTaskImport, validateTaskImportRow } from "./task-import";
 
 const exact = {
   title: "Capital of France",
@@ -28,6 +28,22 @@ describe("task import parsing", () => {
     expect(preview.rows[0].task).toMatchObject({ verifierType: "NUMERIC", verifierConfig: { expected: 4, tolerance: 0 }, tags: ["math", "arithmetic"] });
   });
 
+  it("inspects arbitrary source columns and applies explicit mapping", () => {
+    const csv = 'name,instruction,kind,settings,level,labels\n"Add two numbers","Calculate two plus two exactly.",NUMERIC,"{""expected"":4,""tolerance"":0}",EASY,math\n';
+    const inspection = inspectTaskImport(csv, "CSV");
+    expect(inspection.columns).toEqual(["name", "instruction", "kind", "settings", "level", "labels"]);
+    expect(defaultColumnMapping(inspection.columns).title).toBe("");
+    const preview = parseTaskImport(csv, "CSV", [], {
+      title: "name",
+      prompt: "instruction",
+      verifierType: "kind",
+      verifierConfig: "settings",
+      difficulty: "level",
+      tags: "labels",
+    });
+    expect(preview).toMatchObject({ validRows: 1, invalidRows: 0 });
+  });
+
   it("reports canonical field and invalid verifier errors", () => {
     const missing = validateTaskImportRow({ ...exact, title: "" });
     expect(missing).toMatchObject({ success: false });
@@ -41,11 +57,14 @@ describe("task import parsing", () => {
     expect(schema).toMatchObject({ success: false });
   });
 
-  it("detects project and in-file duplicates and applies both strategies", () => {
-    const preview = parseTaskImport(JSON.stringify([exact, exact]), "JSON", [validate(exact)]);
+  it("detects project and in-file duplicates and applies all strategies", () => {
+    const preview = parseTaskImport(JSON.stringify([exact, exact]), "JSON", [{ id: "existing-1", ...validate(exact) }]);
     expect(preview.duplicateRows).toBe(2);
-    expect(planTaskImport(preview, "SKIP").counts).toEqual({ total: 2, imported: 0, skipped: 2, duplicate: 2, failed: 0 });
-    expect(planTaskImport(preview, "IMPORT").counts).toEqual({ total: 2, imported: 2, skipped: 0, duplicate: 2, failed: 0 });
+    expect(planTaskImport(preview, "SKIP").counts).toEqual({ total: 2, imported: 0, replaced: 0, skipped: 2, duplicate: 2, failed: 0 });
+    expect(planTaskImport(preview, "CREATE_NEW").counts).toEqual({ total: 2, imported: 2, replaced: 0, skipped: 0, duplicate: 2, failed: 0 });
+    const replacement = planTaskImport(preview, "REPLACE");
+    expect(replacement.counts).toEqual({ total: 2, imported: 1, replaced: 1, skipped: 1, duplicate: 2, failed: 0 });
+    expect(replacement.replacements[0].taskId).toBe("existing-1");
   });
 
   it("enforces file and row limits", () => {
