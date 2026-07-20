@@ -2,22 +2,29 @@ import Link from "next/link";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DeleteTaskButton } from "@/components/delete-task-button";
+import { ReviewControls } from "@/components/review-controls";
 import { VerificationPlayground } from "@/components/verification-playground";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getDemoRole } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
+import { can } from "@/lib/review";
 import { storedVerifierSchema } from "@/lib/validation";
 
 export default async function TaskPage({ params }: { params: Promise<{ projectId: string; taskId: string }> }) {
   const { projectId, taskId } = await params;
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, projectId },
-    include: {
-      project: { select: { name: true } },
-      verificationRuns: { orderBy: { createdAt: "desc" }, take: 10 },
-    },
-  });
+  const [task, role] = await Promise.all([
+    prisma.task.findFirst({
+      where: { id: taskId, projectId },
+      include: {
+        project: { select: { name: true } },
+        verificationRuns: { orderBy: { createdAt: "desc" }, take: 10 },
+        reviewComments: { orderBy: { createdAt: "desc" } },
+      },
+    }),
+    getDemoRole(),
+  ]);
   if (!task) notFound();
   const tags = Array.isArray(task.tags) ? task.tags.filter((tag): tag is string => typeof tag === "string") : [];
   const verifierValid = storedVerifierSchema.safeParse({ type: task.verifierType, config: task.verifierConfig }).success;
@@ -27,7 +34,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
       <Link href={`/dashboard/projects/${projectId}`} className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />{task.project.name}</Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div><div className="mb-3 flex flex-wrap items-center gap-2"><Badge>{task.status}</Badge><span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label(task.difficulty)}</span></div><h1 className="text-3xl font-bold tracking-tight text-slate-950">{task.title}</h1><p className="mt-2 text-sm text-slate-500">Updated {task.updatedAt.toLocaleString()}</p></div>
-        <Link href={`/dashboard/projects/${projectId}/tasks/${taskId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit task</Link>
+        {can(role, "EDIT_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/${taskId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit task</Link>}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
@@ -37,6 +44,20 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
           <Card><CardHeader><h2 className="font-semibold text-slate-950">Tags</h2></CardHeader><CardContent className="flex flex-wrap gap-2">{tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : <span className="text-sm text-slate-400">No tags</span>}</CardContent></Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review workflow</h2><p className="mt-1 text-sm text-slate-500">Actions are enforced for the current demo role: {role[0]}{role.slice(1).toLowerCase()}.</p></CardHeader>
+        <CardContent><ReviewControls taskId={taskId} status={task.status} role={role} /></CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review comments</h2><p className="mt-1 text-sm text-slate-500">Reviewer feedback and rejection reasons.</p></CardHeader>
+        <CardContent>
+          {task.reviewComments.length === 0 ? <p className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500">No review comments yet.</p> : (
+            <ol className="space-y-5 border-l border-slate-200 pl-5">{task.reviewComments.map((comment) => <li key={comment.id} className="relative"><span className="absolute -left-[25px] top-1 size-2 rounded-full bg-indigo-500 ring-4 ring-white" /><div className="flex flex-wrap items-baseline justify-between gap-2"><strong className="text-sm text-slate-900">{comment.author}</strong><time className="text-xs text-slate-400">{comment.createdAt.toLocaleString()}</time></div><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-600">{comment.body}</p></li>)}</ol>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><h2 className="text-lg font-semibold text-slate-950">Verification playground</h2><p className="mt-1 text-sm text-slate-500">Test a candidate response against this task&apos;s verifier.</p></CardHeader>
@@ -55,7 +76,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
         </CardContent>
       </Card>
 
-      <div className="flex justify-end border-t border-slate-200 pt-6"><DeleteTaskButton taskId={taskId} projectId={projectId} /></div>
+      {can(role, "DELETE_TASK") && <div className="flex justify-end border-t border-slate-200 pt-6"><DeleteTaskButton taskId={taskId} projectId={projectId} /></div>}
     </div>
   );
 }

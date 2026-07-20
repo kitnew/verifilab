@@ -2,20 +2,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  updateTask: vi.fn(),
+  createAudit: vi.fn(),
+  createComment: vi.fn(),
   createRun: vi.fn(),
+  transaction: vi.fn(),
+  getDemoRole: vi.fn().mockResolvedValue("REVIEWER"),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-role", getDemoRole: mocks.getDemoRole }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    task: { findUnique: mocks.findUnique },
+    task: { findUnique: mocks.findUnique, update: mocks.updateTask },
+    auditEvent: { create: mocks.createAudit },
+    reviewComment: { create: mocks.createComment },
     verificationRun: { create: mocks.createRun },
+    $transaction: mocks.transaction,
   },
 }));
 
-import { runVerification } from "./actions";
+import { changeTaskStatus, runVerification } from "./actions";
 
 describe("runVerification", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -69,6 +78,20 @@ describe("runVerification", () => {
 
     expect(await runVerification("task-1", "42")).toEqual({
       error: "Verification ran, but the result could not be saved.",
+    });
+  });
+});
+
+describe("changeTaskStatus", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("persists an approval comment in the review timeline", async () => {
+    mocks.findUnique.mockResolvedValue({ id: "task-1", projectId: "project-1", status: "IN_REVIEW" });
+    mocks.transaction.mockResolvedValue([]);
+
+    expect(await changeTaskStatus("task-1", "APPROVE", "  Looks good.  ")).toEqual({});
+    expect(mocks.createComment).toHaveBeenCalledWith({
+      data: { taskId: "task-1", author: "Reviewer (demo)", body: "Looks good." },
     });
   });
 });

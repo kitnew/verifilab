@@ -1,10 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { COOKIE_NAME, getDemoRole } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
-import { candidateSchema, projectSchema, storedVerifierSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
+import { can, reviewTransition, roles, type ReviewAction, type Role } from "@/lib/review";
+import { candidateSchema, projectSchema, reviewCommentSchema, storedVerifierSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
 import { verify, type VerificationResult } from "@/lib/verifier";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -34,6 +38,7 @@ export async function createProject(input: ProjectInput): Promise<ActionResult> 
 }
 
 export async function createTask(projectId: string, input: TaskInput): Promise<ActionResult> {
+  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot create tasks." };
   const parsed = taskSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
@@ -58,6 +63,7 @@ export async function createTask(projectId: string, input: TaskInput): Promise<A
 }
 
 export async function updateTask(taskId: string, projectId: string, input: TaskInput): Promise<ActionResult> {
+  if (!can(await getDemoRole(), "EDIT_TASK")) return { error: "Your demo role cannot edit tasks." };
   const parsed = taskSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
@@ -79,6 +85,7 @@ export async function updateTask(taskId: string, projectId: string, input: TaskI
 }
 
 export async function deleteTask(taskId: string, projectId: string): Promise<ActionResult> {
+  if (!can(await getDemoRole(), "DELETE_TASK")) return { error: "Your demo role cannot delete tasks." };
   const task = await prisma.task.findFirst({ where: { id: taskId, projectId }, select: { id: true } });
   if (!task) return { error: "Task not found." };
 
@@ -123,4 +130,60 @@ export async function runVerification(taskId: string, candidate: string): Promis
 
   revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${task.id}`);
   return { result };
+}
+
+export async function setDemoRole(value: Role): Promise<ActionResult> {
+  const parsed = z.enum(roles).safeParse(value);
+  if (!parsed.success) return { error: "Invalid demo role." };
+  (await cookies()).set(COOKIE_NAME, parsed.data, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
+  revalidatePath("/dashboard", "layout");
+  return {};
+}
+
+export async function changeTaskStatus(taskId: string, action: ReviewAction, comment = ""): Promise<ActionResult> {
+  const parsedAction = z.enum(["SUBMIT", "APPROVE", "REJECT", "REOPEN"]).safeParse(action);
+  if (!parsedAction.success) return { error: "Invalid review action." };
+  const role = await getDemoRole();
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, status: true } });
+  if (!task) return { error: "Task not found." };
+  const transition = reviewTransition(task.status, parsedAction.data, role, comment);
+  if (!transition.ok) return { error: transition.error };
+
+  try {
+    await prisma.$transaction([
+      prisma.task.update({ where: { id: taskId }, data: { status: transition.nextStatus } }),
+      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: `TASK_${parsedAction.data}`, metadata: { from: task.status, to: transition.nextStatus, role } } }),
+      ...(transition.comment
+        ? [prisma.reviewComment.create({ data: { taskId, author: roleLabel(role), body: transition.comment } })]
+        : []),
+    ]);
+  } catch {
+    return { error: "Could not update the task status. Please try again." };
+  }
+
+  revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${taskId}`);
+  revalidatePath("/dashboard/review");
+  return {};
+}
+
+export async function addReviewComment(taskId: string, comment: string): Promise<ActionResult> {
+  const role = await getDemoRole();
+  if (!can(role, "COMMENT")) return { error: "Your demo role cannot add review comments." };
+  const parsed = reviewCommentSchema.safeParse(comment);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true } });
+  if (!task) return { error: "Task not found." };
+
+  try {
+    await prisma.reviewComment.create({ data: { taskId, author: roleLabel(role), body: parsed.data } });
+  } catch {
+    return { error: "Could not save the comment. Please try again." };
+  }
+
+  revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${taskId}`);
+  return {};
+}
+
+function roleLabel(role: Role) {
+  return `${role[0]}${role.slice(1).toLowerCase()} (demo)`;
 }

@@ -4,11 +4,16 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getDemoRole } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
+import { can } from "@/lib/review";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } } } });
+  const [project, role] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } } } }),
+    getDemoRole(),
+  ]);
   if (!project) notFound();
 
   return (
@@ -16,11 +21,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       <Link href="/dashboard" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />Projects</Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div><p className="mb-1 text-sm font-semibold text-indigo-600">Project</p><h1 className="text-3xl font-bold tracking-tight text-slate-950">{project.name}</h1><p className="mt-2 max-w-2xl text-slate-500">{project.description || "No description"}</p></div>
-        <Link href={`/dashboard/projects/${projectId}/tasks/new`} className={buttonVariants()}><Plus className="mr-2 size-4" />New task</Link>
+        {can(role, "CREATE_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/new`} className={buttonVariants()}><Plus className="mr-2 size-4" />New task</Link>}
       </div>
 
       {project.tasks.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16 text-center"><FileText className="mb-4 size-10 text-slate-300" /><h2 className="font-semibold text-slate-900">No tasks yet</h2><p className="mt-1 text-sm text-slate-500">Create the first verifiable task in this project.</p><Link href={`/dashboard/projects/${projectId}/tasks/new`} className={buttonVariants({ className: "mt-5" })}>Create task</Link></CardContent></Card>
+        <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16 text-center"><FileText className="mb-4 size-10 text-slate-300" /><h2 className="font-semibold text-slate-900">No tasks yet</h2><p className="mt-1 text-sm text-slate-500">Create the first verifiable task in this project.</p>{can(role, "CREATE_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/new`} className={buttonVariants({ className: "mt-5" })}>Create task</Link>}</CardContent></Card>
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3 font-semibold">Task</th><th className="px-5 py-3 font-semibold">Verifier</th><th className="px-5 py-3 font-semibold">Difficulty</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 font-semibold">Updated</th></tr></thead><tbody className="divide-y divide-slate-100">{project.tasks.map((task) => (

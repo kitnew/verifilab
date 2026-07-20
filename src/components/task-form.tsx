@@ -41,9 +41,6 @@ export function TaskForm({ projectId, taskId, initialValues }: { projectId: stri
         <Field label="Difficulty" error={errors.difficulty?.message}>
           <select {...register("difficulty")} className={selectClass}><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option></select>
         </Field>
-        <Field label="Status" error={errors.status?.message}>
-          <select {...register("status")} className={selectClass}><option value="DRAFT">Draft</option><option value="IN_REVIEW">In review</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>
-        </Field>
         <Field label="Tags" error={errors.tags?.message}><Input {...register("tags")} placeholder="math, reasoning" /></Field>
       </div>
 

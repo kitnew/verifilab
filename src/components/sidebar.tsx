@@ -1,18 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Database, FolderKanban, LayoutDashboard, TestTube2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { ClipboardCheck, Database, FolderKanban, LayoutDashboard, TestTube2 } from "lucide-react";
+import { setDemoRole } from "@/app/actions";
+import type { Role } from "@/lib/review";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard", label: "Projects", icon: FolderKanban },
+  { href: "/dashboard/review", label: "Review queue", icon: ClipboardCheck },
   { href: "/dashboard", label: "Datasets", icon: Database, disabled: true },
 ];
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: Role }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-slate-950 text-white md:flex md:flex-col">
@@ -21,13 +28,32 @@ export function Sidebar() {
         <span><strong className="block text-base">VerifiLab</strong><span className="text-xs text-slate-400">RLVR workspace</span></span>
       </Link>
       <nav className="space-y-1 p-4" aria-label="Primary navigation">
-        {links.map(({ href, label, icon: Icon, disabled }, index) => (
-          <Link key={label} href={disabled ? "#" : href} aria-disabled={disabled} className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white", index === 0 && pathname === "/dashboard" && "bg-white/10 text-white", disabled && "pointer-events-none opacity-40")}>
-            <Icon className="size-4" />{label}{disabled && <span className="ml-auto text-[10px] uppercase">Soon</span>}
-          </Link>
-        ))}
+        {links.map(({ href, label, icon: Icon, disabled }, index) => {
+          const active = index === 0 ? pathname === "/dashboard" : href !== "/dashboard" && pathname.startsWith(href);
+          return <Link key={label} href={disabled ? "#" : href} aria-disabled={disabled} className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white", active && "bg-white/10 text-white", disabled && "pointer-events-none opacity-40")}><Icon className="size-4" />{label}{disabled && <span className="ml-auto text-[10px] uppercase">Soon</span>}</Link>;
+        })}
       </nav>
-      <div className="mt-auto border-t border-white/10 p-4 text-xs leading-5 text-slate-400">Local prototype<br />No authentication</div>
+      <div className="mt-auto border-t border-white/10 p-4">
+        <label htmlFor="demo-role" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Demo role</label>
+        <select
+          id="demo-role"
+          value={role}
+          disabled={pending}
+          onChange={(event) => startTransition(async () => {
+            setError("");
+            const result = await setDemoRole(event.target.value as Role);
+            if (result.error) return setError(result.error);
+            router.refresh();
+          })}
+          className="h-9 w-full rounded-lg border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-400"
+        >
+          <option className="text-slate-950" value="AUTHOR">Author</option>
+          <option className="text-slate-950" value="REVIEWER">Reviewer</option>
+          <option className="text-slate-950" value="ADMIN">Admin</option>
+        </select>
+        {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
+        <p className="mt-3 text-xs leading-5 text-slate-400">Demo only · No authentication</p>
+      </div>
     </aside>
   );
 }

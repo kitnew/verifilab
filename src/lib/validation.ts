@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const candidateSchema = z.string().max(10_000, "Candidate response is too long");
+export const reviewCommentSchema = z.string().trim().min(1, "Comment is required").max(2_000, "Comment is too long");
 
 const regexConfigSchema = z
   .object({
@@ -94,7 +95,6 @@ export function toTaskData(input: TaskInput) {
     prompt: value.prompt,
     verifierType: value.verifierType,
     difficulty: value.difficulty,
-    status: value.status,
     tags: [...new Set(value.tags.split(",").map((tag) => tag.trim()).filter(Boolean))],
     verifierConfig,
   };
