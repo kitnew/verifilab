@@ -234,11 +234,33 @@ model Dataset {
   description   String                @default("")
   items         DatasetItem[]
   versions      DatasetVersion[]
+  releases      DatasetRelease[]
   qualityReport DatasetQualityReport?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
   @@index([projectId])
+}
+
+model DatasetRelease {
+  id                   String   @id @default(cuid())
+  datasetId            String
+  dataset              Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  version              String
+  notes                String   @default("")
+  seed                 String
+  trainPercentage      Int
+  validationPercentage Int
+  testPercentage       Int
+  totalCount           Int
+  trainCount           Int
+  validationCount      Int
+  testCount            Int
+  items                Json
+  createdAt            DateTime @default(now())
+
+  @@unique([datasetId, version])
+  @@index([datasetId, createdAt])
 }
 
 model DatasetQualityReport {

@@ -11,6 +11,8 @@ const labels: Record<string, string> = {
   TASK_ADDED_TO_DATASET: "Task added to dataset",
   DATASET_EXPORTED: "Dataset exported",
   DATASET_QUALITY_SCANNED: "Dataset quality scanned",
+  DATASET_RELEASE_CREATED: "Dataset release created",
+  DATASET_RELEASE_EXPORTED: "Dataset release exported",
   EVALUATION_BATCH_CREATED: "Evaluation batch created",
   EVALUATION_RESPONSES_IMPORTED: "Evaluation responses imported",
   EVALUATION_STARTED: "Evaluation started",
@@ -33,6 +35,8 @@ export function auditDetail(action: string, value: unknown) {
   if (action === "TASK_ADDED_TO_DATASET") return `Added to ${string(metadata.datasetName)}`;
   if (action === "DATASET_EXPORTED") return `${string(metadata.datasetName)} · ${string(metadata.format).toUpperCase()}`;
   if (action === "DATASET_QUALITY_SCANNED") return `${number(metadata.taskCount)} tasks · score ${number(metadata.score)}`;
+  if (action === "DATASET_RELEASE_CREATED") return `${string(metadata.version)} · ${number(metadata.taskCount)} tasks`;
+  if (action === "DATASET_RELEASE_EXPORTED") return `${string(metadata.version)} · ${string(metadata.split)}`;
   if (action === "EVALUATION_RESPONSES_IMPORTED") return `${number(metadata.validCount)} valid · ${number(metadata.invalidCount)} invalid`;
   if (action === "EVALUATION_RESULTS_RERUN") return `${number(metadata.affected)} results · ${string(metadata.mode).toLowerCase()}`;
   if (action === "EVALUATION_EXPORTED") return `${number(metadata.resultCount)} results · ${string(metadata.format).toUpperCase()}`;

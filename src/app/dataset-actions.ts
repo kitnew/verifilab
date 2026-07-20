@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { datasetExportItems, datasetSchema, datasetTaskIdsSchema, datasetUpdateSchema, isDatasetEligible, type DatasetInput } from "@/lib/dataset";
 import { analyzeDatasetQuality } from "@/lib/dataset-quality";
+import { createDatasetReleaseItems, datasetReleaseSchema, releaseSplitCounts, releaseVersionIsUnique } from "@/lib/dataset-release";
 import { prisma } from "@/lib/prisma";
 
-export type DatasetActionResult = { error?: string };
+export type DatasetActionResult = { error?: string; releaseId?: string };
 
 export async function createDataset(input: DatasetInput): Promise<DatasetActionResult> {
   const parsed = datasetSchema.safeParse(input);
@@ -171,4 +172,51 @@ export async function runDatasetQualityScan(datasetId: string): Promise<DatasetA
   revalidatePath(`/dashboard/datasets/${dataset.id}/quality`);
   revalidatePath("/dashboard/activity");
   return {};
+}
+
+export async function createDatasetRelease(datasetId: string, input: unknown): Promise<DatasetActionResult> {
+  const parsed = datasetReleaseSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const dataset = await prisma.dataset.findUnique({
+    where: { id: datasetId },
+    include: {
+      items: {
+        orderBy: { position: "asc" },
+        include: { task: { include: { project: { select: { id: true, name: true, description: true } } } } },
+      },
+      releases: { where: { version: parsed.data.version }, select: { version: true } },
+    },
+  });
+  if (!dataset) return { error: "Dataset not found." };
+  if (!dataset.items.length) return { error: "An empty dataset cannot produce a release." };
+  if (!releaseVersionIsUnique(dataset.releases.map((release) => release.version), parsed.data.version)) return { error: `Release ${parsed.data.version} already exists in this dataset.` };
+  const snapshot = datasetExportItems(dataset.items);
+  const released = createDatasetReleaseItems(snapshot, parsed.data, parsed.data.seed);
+  const counts = releaseSplitCounts(released.length, parsed.data);
+  try {
+    const release = await prisma.$transaction(async (transaction) => {
+      const created = await transaction.datasetRelease.create({ data: {
+        datasetId: dataset.id,
+        version: parsed.data.version,
+        notes: parsed.data.notes,
+        seed: parsed.data.seed,
+        trainPercentage: parsed.data.trainPercentage,
+        validationPercentage: parsed.data.validationPercentage,
+        testPercentage: parsed.data.testPercentage,
+        totalCount: released.length,
+        trainCount: counts.train,
+        validationCount: counts.validation,
+        testCount: counts.test,
+        items: released as Prisma.InputJsonArray,
+      } });
+      await transaction.auditEvent.create({ data: { projectId: dataset.projectId, action: "DATASET_RELEASE_CREATED", metadata: { datasetId: dataset.id, releaseId: created.id, version: created.version, taskCount: created.totalCount } } });
+      return created;
+    });
+    revalidatePath(`/dashboard/datasets/${dataset.id}`);
+    revalidatePath("/dashboard/activity");
+    return { releaseId: release.id };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { error: `Release ${parsed.data.version} already exists in this dataset.` };
+    return { error: "Could not create the dataset release. Please try again." };
+  }
 }
