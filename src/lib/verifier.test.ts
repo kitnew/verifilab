@@ -109,6 +109,59 @@ describe("REGEX", () => {
   });
 });
 
+describe("JSON_SCHEMA", () => {
+  const verifier = {
+    type: "JSON_SCHEMA" as const,
+    config: {
+      schema: {
+        type: "object",
+        required: ["name", "age"],
+        properties: { name: { type: "string" }, age: { type: "integer", minimum: 0 } },
+        additionalProperties: false,
+      },
+    },
+  };
+
+  it("passes valid JSON that satisfies the schema", () => {
+    expect(verify('{"name":"Ada","age":37}', verifier)).toMatchObject({
+      passed: true,
+      reward: 1,
+      details: "Candidate JSON satisfies the configured schema.",
+    });
+  });
+
+  it("rejects malformed JSON with a structured parse error", () => {
+    expect(verify('{"name":', verifier)).toMatchObject({
+      passed: false,
+      reward: 0,
+      validationErrors: [{ instancePath: "", keyword: "parse", message: "Candidate is not valid JSON." }],
+    });
+  });
+
+  it("returns all structured schema validation errors", () => {
+    const result = verify('{"age":"old","extra":true}', verifier);
+
+    expect(result.passed).toBe(false);
+    expect(result.validationErrors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ instancePath: "", keyword: "required" }),
+      expect.objectContaining({ instancePath: "", keyword: "additionalProperties" }),
+      expect.objectContaining({ instancePath: "/age", keyword: "type" }),
+    ]));
+  });
+
+  it("supports required properties without a properties declaration", () => {
+    const requiredOnlyVerifier = {
+      type: "JSON_SCHEMA" as const,
+      config: { schema: { type: "object", required: ["answer"] } },
+    };
+
+    expect(verify('{"answer":42}', requiredOnlyVerifier).passed).toBe(true);
+    expect(verify("{}", requiredOnlyVerifier).validationErrors).toEqual([
+      expect.objectContaining({ keyword: "required" }),
+    ]);
+  });
+});
+
 it("always reports a non-negative execution time", () => {
   const result = verify("ok", { type: "EXACT_MATCH", config: { expected: "ok" } });
   expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);

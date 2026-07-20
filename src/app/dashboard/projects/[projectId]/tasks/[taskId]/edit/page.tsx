@@ -30,6 +30,7 @@ export default async function EditTaskPage({ params }: { params: Promise<{ proje
     tolerance: typeof config.tolerance === "number" ? String(config.tolerance) : "0",
     pattern: typeof config.pattern === "string" ? config.pattern : "",
     flags: typeof config.flags === "string" ? config.flags : "",
+    jsonSchema: task.verifierType === "JSON_SCHEMA" ? JSON.stringify(config.schema, null, 2) : "",
   };
 
   return <div className="mx-auto max-w-3xl"><Link href={`/dashboard/projects/${projectId}/tasks/${taskId}`} className="mb-6 inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />Back to task</Link><Card><CardHeader><h1 className="text-2xl font-bold text-slate-950">Edit task</h1><p className="mt-1 text-sm text-slate-500">Update task content and verifier settings.</p></CardHeader><CardContent><TaskForm projectId={projectId} taskId={taskId} initialValues={initialValues} /></CardContent></Card></div>;

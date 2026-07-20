@@ -38,6 +38,22 @@ async function main() {
             status: "DRAFT",
             tags: ["formatting", "regex"],
           },
+          {
+            title: "Structured final answer",
+            prompt: "Return a JSON object with an integer answer and a non-empty string explanation.",
+            verifierType: "JSON_SCHEMA",
+            verifierConfig: {
+              schema: {
+                type: "object",
+                required: ["answer", "explanation"],
+                properties: { answer: { type: "integer" }, explanation: { type: "string", minLength: 1 } },
+                additionalProperties: false,
+              },
+            },
+            difficulty: "MEDIUM",
+            status: "DRAFT",
+            tags: ["structured-output", "json"],
+          },
         ],
       },
       auditEvents: {

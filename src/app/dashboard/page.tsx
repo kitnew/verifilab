@@ -8,7 +8,7 @@ import { percentage } from "@/lib/dashboard";
 import { prisma } from "@/lib/prisma";
 
 const statuses = ["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"] as const;
-const verifiers = ["EXACT_MATCH", "NUMERIC", "REGEX"] as const;
+const verifiers = ["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"] as const;
 
 export default async function DashboardPage() {
   const [projects, statusGroups, verifierGroups, verificationGroups, datasetCount, recentActivity, recentTasks] = await Promise.all([

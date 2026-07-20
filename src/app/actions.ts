@@ -246,6 +246,7 @@ export async function runVerification(taskId: string, candidate: string): Promis
     details: result.details,
     executionTimeMs: result.executionTimeMs,
     ...(result.normalizedCandidate === undefined ? {} : { normalizedCandidate: result.normalizedCandidate }),
+    ...(result.validationErrors === undefined ? {} : { validationErrors: result.validationErrors as Prisma.InputJsonValue }),
   };
 
   try {

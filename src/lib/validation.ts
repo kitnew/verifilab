@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compileJsonSchema } from "@/lib/verifier";
 
 export const candidateSchema = z.string().max(10_000, "Candidate response is too long");
 export const reviewCommentSchema = z.string().trim().min(1, "Comment is required").max(2_000, "Comment is too long");
@@ -30,6 +31,16 @@ export const storedVerifierSchema = z.discriminatedUnion("type", [
     config: z.object({ expected: z.number().finite(), tolerance: z.number().finite().nonnegative() }),
   }),
   z.object({ type: z.literal("REGEX"), config: regexConfigSchema }),
+  z.object({
+    type: z.literal("JSON_SCHEMA"),
+    config: z.object({ schema: z.unknown() }).superRefine(({ schema }, ctx) => {
+      try {
+        compileJsonSchema(schema);
+      } catch {
+        ctx.addIssue({ code: "custom", path: ["schema"], message: "Invalid JSON Schema" });
+      }
+    }),
+  }),
 ]);
 
 export const projectSchema = z.object({
@@ -41,7 +52,7 @@ export const taskSchema = z
   .object({
     title: z.string().trim().min(3, "Title must be at least 3 characters").max(120),
     prompt: z.string().trim().min(10, "Prompt must be at least 10 characters").max(10_000),
-    verifierType: z.enum(["EXACT_MATCH", "NUMERIC", "REGEX"]),
+    verifierType: z.enum(["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"]),
     difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
     status: z.enum(["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"]),
     tags: z.string().max(300).default(""),
@@ -50,6 +61,7 @@ export const taskSchema = z
     tolerance: z.string().default("0"),
     pattern: z.string().max(2_000).default(""),
     flags: z.string().regex(/^[dgimsuvy]*$/, "Use valid JavaScript regex flags only").default(""),
+    jsonSchema: z.string().max(20_000, "JSON Schema is too long").default(""),
   })
   .superRefine((value, ctx) => {
     if (value.verifierType === "EXACT_MATCH" && !value.expectedText.trim()) {
@@ -76,6 +88,13 @@ export const taskSchema = z
         }
       }
     }
+    if (value.verifierType === "JSON_SCHEMA") {
+      try {
+        compileJsonSchema(JSON.parse(value.jsonSchema));
+      } catch {
+        ctx.addIssue({ code: "custom", path: ["jsonSchema"], message: "Enter a valid JSON Schema" });
+      }
+    }
   });
 
 export type ProjectInput = z.input<typeof projectSchema>;
@@ -88,7 +107,9 @@ export function toTaskData(input: TaskInput) {
       ? { expected: value.expectedText.trim(), caseSensitive: false, trimWhitespace: true }
       : value.verifierType === "NUMERIC"
         ? { expected: Number(value.expectedNumber), tolerance: Number(value.tolerance) }
-        : { pattern: value.pattern, flags: value.flags };
+        : value.verifierType === "REGEX"
+          ? { pattern: value.pattern, flags: value.flags }
+          : { schema: JSON.parse(value.jsonSchema) };
 
   return {
     title: value.title,

@@ -45,4 +45,16 @@ describe("task validation", () => {
       taskSchema.safeParse({ ...base, verifierType: "REGEX", pattern: "[", flags: "" }).success,
     ).toBe(false);
   });
+
+  it("validates and stores JSON Schema configuration", () => {
+    const jsonSchema = '{"type":"object","required":["answer"],"properties":{"answer":{"type":"number"}}}';
+    expect(toTaskData({ ...base, verifierType: "JSON_SCHEMA", jsonSchema }).verifierConfig).toEqual({ schema: JSON.parse(jsonSchema) });
+    expect(taskSchema.safeParse({
+      ...base,
+      verifierType: "JSON_SCHEMA",
+      jsonSchema: '{"type":"object","required":["answer"]}',
+    }).success).toBe(true);
+    expect(taskSchema.safeParse({ ...base, verifierType: "JSON_SCHEMA", jsonSchema: "{" }).success).toBe(false);
+    expect(taskSchema.safeParse({ ...base, verifierType: "JSON_SCHEMA", jsonSchema: '{"type":"not-a-type"}' }).success).toBe(false);
+  });
 });

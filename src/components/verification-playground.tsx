@@ -59,6 +59,7 @@ export function VerificationPlayground({ taskId, disabled }: { taskId: string; d
             <div><dt className="text-slate-500">Execution time</dt><dd className="mt-1 font-semibold text-slate-900">{result.executionTimeMs.toFixed(3)} ms</dd></div>
             <div className="sm:col-span-3"><dt className="text-slate-500">Details</dt><dd className="mt-1 text-slate-800">{result.details}</dd></div>
           </dl>
+          {result.validationErrors && result.validationErrors.length > 0 && <div className="mt-4 border-t border-red-200 pt-4"><h3 className="text-sm font-semibold text-red-900">Validation errors</h3><ul className="mt-2 space-y-2">{result.validationErrors.map((validationError, index) => <li className="rounded-lg bg-white/70 p-3 text-sm text-red-900" key={`${validationError.instancePath}-${validationError.keyword}-${index}`}><code className="font-semibold">{validationError.instancePath || "/"}</code> {validationError.message}<span className="mt-1 block font-mono text-xs text-red-700">{validationError.keyword} · {validationError.schemaPath || "candidate JSON"}</span></li>)}</ul></div>}
         </div>
       )}
     </div>

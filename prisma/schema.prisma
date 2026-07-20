@@ -11,6 +11,7 @@ enum VerifierType {
   EXACT_MATCH
   NUMERIC
   REGEX
+  JSON_SCHEMA
 }
 
 enum Difficulty {

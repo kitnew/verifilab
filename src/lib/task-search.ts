@@ -2,7 +2,7 @@ export const TASK_PAGE_SIZE = 10;
 
 export const taskStatuses = ["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"] as const;
 export const taskDifficulties = ["EASY", "MEDIUM", "HARD"] as const;
-export const taskVerifierTypes = ["EXACT_MATCH", "NUMERIC", "REGEX"] as const;
+export const taskVerifierTypes = ["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"] as const;
 export const taskSorts = ["newest", "oldest", "title", "difficulty"] as const;
 
 type SearchParams = Record<string, string | string[] | undefined>;
