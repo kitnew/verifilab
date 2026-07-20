@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { datasetExportItems, datasetSchema, datasetTaskIdsSchema, datasetUpdateSchema, isDatasetEligible, type DatasetInput } from "@/lib/dataset";
+import { analyzeDatasetQuality } from "@/lib/dataset-quality";
 import { prisma } from "@/lib/prisma";
 
 export type DatasetActionResult = { error?: string };
@@ -123,5 +125,50 @@ export async function snapshotDataset(datasetId: string): Promise<DatasetActionR
     return { error: "Could not create the snapshot. Please try again." };
   }
   revalidatePath(`/dashboard/datasets/${datasetId}`);
+  return {};
+}
+
+export async function runDatasetQualityScan(datasetId: string): Promise<DatasetActionResult> {
+  const parsedId = z.string().min(1).safeParse(datasetId);
+  if (!parsedId.success) return { error: "Invalid dataset ID." };
+  const dataset = await prisma.dataset.findUnique({
+    where: { id: parsedId.data },
+    select: {
+      id: true,
+      projectId: true,
+      items: { orderBy: { position: "asc" }, select: { task: { select: {
+        id: true, title: true, prompt: true, status: true, verifierType: true, verifierConfig: true, difficulty: true, tags: true, generatorTemplate: true,
+        verificationRuns: { select: { passed: true } },
+        evaluationBatches: { select: { results: { where: { status: { in: ["PASSED", "FAILED"] } }, select: { status: true, reward: true, executionTimeMs: true } } } },
+      } } } },
+    },
+  });
+  if (!dataset) return { error: "Dataset not found." };
+  const report = analyzeDatasetQuality(dataset.items.map((item) => item.task));
+  const data = {
+    taskCount: report.taskCount,
+    overallScore: report.overallScore,
+    completenessScore: report.completenessScore,
+    verifierValidityScore: report.verifierValidityScore,
+    duplicateSafetyScore: report.duplicateSafetyScore,
+    verificationEvidenceScore: report.verificationEvidenceScore,
+    errorCount: report.errorCount,
+    warningCount: report.warningCount,
+    infoCount: report.infoCount,
+    issues: report.issues as Prisma.InputJsonValue,
+    distributions: report.distributions as Prisma.InputJsonValue,
+    scannedAt: new Date(),
+  };
+  try {
+    await prisma.$transaction([
+      prisma.datasetQualityReport.upsert({ where: { datasetId: dataset.id }, create: { datasetId: dataset.id, ...data }, update: data }),
+      prisma.auditEvent.create({ data: { projectId: dataset.projectId, action: "DATASET_QUALITY_SCANNED", metadata: { datasetId: dataset.id, taskCount: report.taskCount, score: report.overallScore } } }),
+    ]);
+  } catch {
+    return { error: "Could not scan dataset quality. Please try again." };
+  }
+  revalidatePath(`/dashboard/datasets/${dataset.id}`);
+  revalidatePath(`/dashboard/datasets/${dataset.id}/quality`);
+  revalidatePath("/dashboard/activity");
   return {};
 }

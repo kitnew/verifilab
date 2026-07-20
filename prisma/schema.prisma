@@ -227,17 +227,38 @@ model ReviewComment {
 }
 
 model Dataset {
-  id          String           @id @default(cuid())
-  projectId   String
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name        String
-  description String           @default("")
-  items       DatasetItem[]
-  versions    DatasetVersion[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id            String                @id @default(cuid())
+  projectId     String
+  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String
+  description   String                @default("")
+  items         DatasetItem[]
+  versions      DatasetVersion[]
+  qualityReport DatasetQualityReport?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   @@index([projectId])
+}
+
+model DatasetQualityReport {
+  id                        String   @id @default(cuid())
+  datasetId                 String   @unique
+  dataset                   Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  taskCount                 Int
+  overallScore              Int
+  completenessScore         Int
+  verifierValidityScore     Int
+  duplicateSafetyScore      Int
+  verificationEvidenceScore Int
+  errorCount                Int
+  warningCount              Int
+  infoCount                 Int
+  issues                    Json
+  distributions             Json
+  scannedAt                 DateTime @default(now())
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }
 
 model DatasetVersion {
