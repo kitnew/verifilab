@@ -1,9 +1,9 @@
 import { Prisma } from "@prisma/client";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+import { BulkTaskTable } from "@/components/bulk-task-table";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { prisma } from "@/lib/prisma";
 import {
@@ -25,7 +25,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   const conditions = taskConditions(search);
   const where = Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
 
-  const [projects, tags, countRows] = await Promise.all([
+  const [projects, tags, datasets, countRows] = await Promise.all([
     prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.$queryRaw<{ tag: string }[]>`
       SELECT DISTINCT CAST(tag.value AS TEXT) AS tag
@@ -33,6 +33,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
       WHERE CAST(tag.value AS TEXT) <> ''
       ORDER BY tag COLLATE NOCASE ASC
     `,
+    prisma.dataset.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, project: { select: { name: true } } } }),
     prisma.$queryRaw<{ total: bigint }[]>(Prisma.sql`
       SELECT COUNT(*) AS total FROM "Task" task ${where}
     `),
@@ -91,14 +92,15 @@ export default async function TasksPage({ searchParams }: PageProps) {
       {tasks.length === 0 ? (
         <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16 text-center"><Search className="mb-4 size-10 text-slate-300" /><h2 className="font-semibold text-slate-900">{hasFilters ? "No matching tasks" : "No tasks yet"}</h2><p className="mt-1 text-sm text-slate-500">{hasFilters ? "Try changing or resetting the current filters." : "Create a task inside a project to see it here."}</p>{hasFilters && <Link className={buttonVariants({ variant: "secondary", className: "mt-5" })} href="/dashboard/tasks">Reset filters</Link>}</CardContent></Card>
       ) : (
-        <Card className="overflow-hidden">
-          <CardHeader className="flex-row items-center justify-between"><h2 className="font-semibold text-slate-950">{total} {total === 1 ? "task" : "tasks"}</h2><span className="text-sm text-slate-500">Page {currentPage} of {totalPages}</span></CardHeader>
-          <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-y border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3 font-semibold">Task</th><th className="px-5 py-3 font-semibold">Project</th><th className="px-5 py-3 font-semibold">Verifier</th><th className="px-5 py-3 font-semibold">Difficulty</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 font-semibold">Created</th></tr></thead><tbody className="divide-y divide-slate-100">{tasks.map((task) => <tr className="transition-colors hover:bg-slate-50" key={task.id}><td className="max-w-80 px-5 py-4"><Link className="block truncate font-semibold text-slate-900 hover:text-indigo-600" href={`/dashboard/projects/${task.projectId}/tasks/${task.id}`}>{task.title}</Link><p className="mt-1 truncate text-xs text-slate-500">{tagsFrom(task.tags).join(", ") || "No tags"}</p></td><td className="px-5 py-4 text-slate-500">{task.project.name}</td><td className="whitespace-nowrap px-5 py-4 text-slate-500">{label(task.verifierType)}</td><td className="px-5 py-4 text-slate-500">{label(task.difficulty)}</td><td className="px-5 py-4"><Badge>{task.status}</Badge></td><td className="whitespace-nowrap px-5 py-4 text-slate-500">{task.createdAt.toLocaleDateString()}</td></tr>)}</tbody></table></div>
-          <CardContent className="flex items-center justify-between border-t border-slate-200 py-4">
-            {currentPage > 1 ? <Link className={buttonVariants({ variant: "secondary", size: "sm" })} href={taskSearchHref(search, currentPage - 1)}><ChevronLeft className="mr-1 size-4" />Previous</Link> : <span />}
-            {currentPage < totalPages && <Link className={buttonVariants({ variant: "secondary", size: "sm" })} href={taskSearchHref(search, currentPage + 1)}>Next<ChevronRight className="ml-1 size-4" /></Link>}
-          </CardContent>
-        </Card>
+        <BulkTaskTable
+          tasks={tasks.map((task) => ({ id: task.id, projectId: task.projectId, title: task.title, project: task.project.name, verifierType: task.verifierType, difficulty: task.difficulty, status: task.status, tags: tagsFrom(task.tags), createdAt: task.createdAt.toISOString() }))}
+          datasets={datasets.map((dataset) => ({ id: dataset.id, name: dataset.name, project: dataset.project.name }))}
+          total={total}
+          page={currentPage}
+          totalPages={totalPages}
+          previousHref={currentPage > 1 ? taskSearchHref(search, currentPage - 1) : undefined}
+          nextHref={currentPage < totalPages ? taskSearchHref(search, currentPage + 1) : undefined}
+        />
       )}
     </div>
   );
