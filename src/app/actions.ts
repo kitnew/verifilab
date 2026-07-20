@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { projectSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
+import { candidateSchema, projectSchema, storedVerifierSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
+import { verify, type VerificationResult } from "@/lib/verifier";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -88,4 +90,37 @@ export async function deleteTask(taskId: string, projectId: string): Promise<Act
 
   revalidatePath(`/dashboard/projects/${projectId}`);
   redirect(`/dashboard/projects/${projectId}`);
+}
+
+export async function runVerification(taskId: string, candidate: string): Promise<{ error?: string; result?: VerificationResult }> {
+  const parsedCandidate = candidateSchema.safeParse(candidate);
+  if (!parsedCandidate.success) return { error: parsedCandidate.error.issues[0].message };
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, projectId: true, verifierType: true, verifierConfig: true },
+  });
+  if (!task) return { error: "Task not found." };
+
+  const parsedVerifier = storedVerifierSchema.safeParse({ type: task.verifierType, config: task.verifierConfig });
+  if (!parsedVerifier.success) return { error: "This task has an invalid verifier configuration." };
+
+  const result = verify(parsedCandidate.data, parsedVerifier.data);
+  const details: Prisma.InputJsonObject = {
+    reward: result.reward,
+    details: result.details,
+    executionTimeMs: result.executionTimeMs,
+    ...(result.normalizedCandidate === undefined ? {} : { normalizedCandidate: result.normalizedCandidate }),
+  };
+
+  try {
+    await prisma.verificationRun.create({
+      data: { taskId, candidate: parsedCandidate.data, passed: result.passed, details },
+    });
+  } catch {
+    return { error: "Verification ran, but the result could not be saved." };
+  }
+
+  revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${task.id}`);
+  return { result };
 }

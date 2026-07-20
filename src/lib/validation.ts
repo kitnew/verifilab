@@ -1,5 +1,36 @@
 import { z } from "zod";
 
+export const candidateSchema = z.string().max(10_000, "Candidate response is too long");
+
+const regexConfigSchema = z
+  .object({
+    pattern: z.string().max(2_000),
+    flags: z.string().regex(/^[dgimsuvy]*$/).default(""),
+  })
+  .superRefine(({ pattern, flags }, ctx) => {
+    try {
+      new RegExp(pattern, flags);
+    } catch {
+      ctx.addIssue({ code: "custom", path: ["pattern"], message: "Invalid regular expression" });
+    }
+  });
+
+export const storedVerifierSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("EXACT_MATCH"),
+    config: z.object({
+      expected: z.string(),
+      caseSensitive: z.boolean().default(false),
+      trimWhitespace: z.boolean().default(true),
+    }),
+  }),
+  z.object({
+    type: z.literal("NUMERIC"),
+    config: z.object({ expected: z.number().finite(), tolerance: z.number().finite().nonnegative() }),
+  }),
+  z.object({ type: z.literal("REGEX"), config: regexConfigSchema }),
+]);
+
 export const projectSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(80),
   description: z.string().trim().max(400).default(""),
