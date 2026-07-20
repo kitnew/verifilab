@@ -33,6 +33,12 @@ describe("task validation", () => {
     });
   });
 
+  it("stores explicit exact-match normalization defaults", () => {
+    expect(
+      toTaskData({ ...base, verifierType: "EXACT_MATCH", expectedText: "  Answer  " }).verifierConfig,
+    ).toEqual({ expected: "Answer", caseSensitive: false, trimWhitespace: true });
+  });
+
   it("rejects negative tolerance and invalid regex", () => {
     expect(taskSchema.safeParse({ ...base, tolerance: "-1" }).success).toBe(false);
     expect(

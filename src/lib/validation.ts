@@ -53,7 +53,7 @@ export function toTaskData(input: TaskInput) {
   const value = taskSchema.parse(input);
   const verifierConfig =
     value.verifierType === "EXACT_MATCH"
-      ? { expected: value.expectedText.trim(), caseSensitive: false }
+      ? { expected: value.expectedText.trim(), caseSensitive: false, trimWhitespace: true }
       : value.verifierType === "NUMERIC"
         ? { expected: Number(value.expectedNumber), tolerance: Number(value.tolerance) }
         : { pattern: value.pattern, flags: value.flags };
