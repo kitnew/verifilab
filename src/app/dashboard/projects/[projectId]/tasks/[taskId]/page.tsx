@@ -45,6 +45,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
         <div className="space-y-5">
           <Card><CardHeader><h2 className="font-semibold text-slate-950">Verifier</h2></CardHeader><CardContent><p className="mb-3 text-sm font-medium text-indigo-700">{label(task.verifierType)}</p><pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">{JSON.stringify(task.verifierConfig, null, 2)}</pre></CardContent></Card>
           <Card><CardHeader><h2 className="font-semibold text-slate-950">Tags</h2></CardHeader><CardContent className="flex flex-wrap gap-2">{tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : <span className="text-sm text-slate-400">No tags</span>}</CardContent></Card>
+          {task.generatorTemplate && <Card><CardHeader><h2 className="font-semibold text-slate-950">Generation</h2></CardHeader><CardContent className="space-y-1 text-sm text-slate-600"><p>{label(task.generatorTemplate)} · version {task.generatorVersion}</p><p>Seed: <span className="font-mono">{task.generationSeed}</span></p><p>Batch: <span className="font-mono text-xs">{task.generationBatchId}</span></p>{task.expectedAnswer && <p className="truncate" title={task.expectedAnswer}>Expected: <span className="font-mono text-xs">{task.expectedAnswer}</span></p>}</CardContent></Card>}
         </div>
       </div>
 

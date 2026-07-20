@@ -27,36 +27,83 @@ enum TaskStatus {
   REJECTED
 }
 
+enum GeneratorType {
+  ARITHMETIC
+  LINEAR_EQUATIONS
+  STRING_TRANSFORMATIONS
+  JSON_STRUCTURE
+  REGEX_FORMAT
+}
+
+enum GenerationJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 model Project {
-  id          String       @id @default(cuid())
-  name        String
-  description String       @default("")
-  tasks       Task[]
-  datasets    Dataset[]
-  auditEvents AuditEvent[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id             String          @id @default(cuid())
+  name           String
+  description    String          @default("")
+  tasks          Task[]
+  datasets       Dataset[]
+  auditEvents    AuditEvent[]
+  generationJobs GenerationJob[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Task {
-  id               String            @id @default(cuid())
+  id                    String            @id @default(cuid())
+  projectId             String
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title                 String
+  prompt                String
+  verifierType          VerifierType
+  verifierConfig        Json
+  difficulty            Difficulty
+  status                TaskStatus        @default(DRAFT)
+  tags                  Json
+  expectedAnswer        String?
+  generatorTemplate     GeneratorType?
+  generatorVersion      Int?
+  generationSeed        String?
+  generationBatchId     String?
+  generationJob         GenerationJob?    @relation(fields: [generationBatchId], references: [id], onDelete: SetNull)
+  generationFingerprint String?
+  verificationRuns      VerificationRun[]
+  reviewComments        ReviewComment[]
+  datasetItems          DatasetItem[]
+  auditEvents           AuditEvent[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([projectId, generationFingerprint])
+  @@index([projectId])
+  @@index([generationBatchId])
+}
+
+model GenerationJob {
+  id               String              @id @default(cuid())
   projectId        String
-  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title            String
-  prompt           String
-  verifierType     VerifierType
-  verifierConfig   Json
+  project          Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status           GenerationJobStatus @default(QUEUED)
+  requestedCount   Int
+  generatedCount   Int                 @default(0)
+  seed             String
+  generatorType    GeneratorType
+  generatorVersion Int                 @default(1)
   difficulty       Difficulty
-  status           TaskStatus        @default(DRAFT)
-  tags             Json
-  verificationRuns VerificationRun[]
-  reviewComments   ReviewComment[]
-  datasetItems     DatasetItem[]
-  auditEvents      AuditEvent[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  progress         Int                 @default(0)
+  errorMessage     String?
+  tasks            Task[]
+  createdAt        DateTime            @default(now())
+  completedAt      DateTime?
 
   @@index([projectId])
+  @@index([createdAt])
 }
 
 model VerificationRun {
