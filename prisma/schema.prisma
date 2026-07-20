@@ -68,6 +68,17 @@ enum EvaluationResultStatus {
   ERROR
 }
 
+enum TaskImportFormat {
+  CSV
+  JSON
+  JSONL
+}
+
+enum TaskImportStatus {
+  COMPLETED
+  FAILED
+}
+
 model Project {
   id             String          @id @default(cuid())
   name           String
@@ -76,8 +87,28 @@ model Project {
   datasets       Dataset[]
   auditEvents    AuditEvent[]
   generationJobs GenerationJob[]
+  taskImports    TaskImport[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+}
+
+model TaskImport {
+  id             String           @id @default(cuid())
+  projectId      String
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  filename       String
+  format         TaskImportFormat
+  status         TaskImportStatus
+  totalCount     Int
+  importedCount  Int
+  skippedCount   Int
+  duplicateCount Int
+  failedCount    Int
+  rejectedRows   Json
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+
+  @@index([projectId, createdAt])
 }
 
 model Task {
