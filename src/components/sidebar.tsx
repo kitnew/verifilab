@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ClipboardCheck, Database, FolderKanban, LayoutDashboard, TestTube2 } from "lucide-react";
+import { ClipboardCheck, Database, FileSearch, FolderKanban, LayoutDashboard, TestTube2 } from "lucide-react";
 import { setDemoRole } from "@/app/actions";
 import type { Role } from "@/lib/review";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard", label: "Projects", icon: FolderKanban },
+  { href: "/dashboard/tasks", label: "Tasks", icon: FileSearch },
   { href: "/dashboard/review", label: "Review queue", icon: ClipboardCheck },
   { href: "/dashboard/datasets", label: "Datasets", icon: Database },
 ];
