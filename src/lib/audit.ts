@@ -1,0 +1,39 @@
+const labels: Record<string, string> = {
+  PROJECT_CREATED: "Project created",
+  TASK_CREATED: "Task created",
+  TASK_UPDATED: "Task updated",
+  TASK_DUPLICATED: "Task duplicated",
+  VERIFICATION_EXECUTED: "Verification executed",
+  TASK_SUBMIT: "Review submitted",
+  TASK_APPROVE: "Task approved",
+  TASK_REJECT: "Task rejected",
+  DATASET_CREATED: "Dataset created",
+  TASK_ADDED_TO_DATASET: "Task added to dataset",
+  DATASET_EXPORTED: "Dataset exported",
+};
+
+export function auditLabel(action: string) {
+  return labels[action] ?? action.toLowerCase().replaceAll("_", " ").replace(/^./, (character) => character.toUpperCase());
+}
+
+export function auditDetail(action: string, value: unknown) {
+  const metadata = object(value);
+  if (action === "VERIFICATION_EXECUTED") return `${metadata.passed ? "PASS" : "FAIL"} · reward ${number(metadata.reward)} · ${number(metadata.executionTimeMs).toFixed(3)} ms`;
+  if (action === "DATASET_CREATED") return string(metadata.datasetName);
+  if (action === "TASK_ADDED_TO_DATASET") return `Added to ${string(metadata.datasetName)}`;
+  if (action === "DATASET_EXPORTED") return `${string(metadata.datasetName)} · ${string(metadata.format).toUpperCase()}`;
+  if (["TASK_SUBMIT", "TASK_APPROVE", "TASK_REJECT"].includes(action) && metadata.role) return `${string(metadata.from)} → ${string(metadata.to)} · ${string(metadata.role).toLowerCase()}`;
+  return "";
+}
+
+function object(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function string(value: unknown) {
+  return typeof value === "string" ? value : "Unknown";
+}
+
+function number(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}

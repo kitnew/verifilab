@@ -16,11 +16,17 @@ export async function createDataset(input: DatasetInput): Promise<DatasetActionR
 
   let dataset;
   try {
-    dataset = await prisma.dataset.create({ data: parsed.data });
+    dataset = await prisma.$transaction(async (transaction) => {
+      const created = await transaction.dataset.create({ data: parsed.data });
+      await transaction.auditEvent.create({ data: { projectId: created.projectId, action: "DATASET_CREATED", metadata: { datasetId: created.id, datasetName: created.name } } });
+      return created;
+    });
   } catch {
     return { error: "Could not create the dataset. Please try again." };
   }
   revalidatePath("/dashboard/datasets");
+  revalidatePath(`/dashboard/projects/${parsed.data.projectId}`);
+  revalidatePath("/dashboard/activity");
   redirect(`/dashboard/datasets/${dataset.id}`);
 }
 
@@ -55,11 +61,16 @@ export async function addTasksToDataset(datasetId: string, taskIds: string[]): P
   const firstPosition = Math.max(0, ...dataset.items.map((item) => item.position)) + 1;
 
   try {
-    await prisma.$transaction(parsedIds.data.map((id, index) => prisma.datasetItem.create({ data: { datasetId, taskId: byId.get(id)!.id, position: firstPosition + index } })));
+    await prisma.$transaction(parsedIds.data.flatMap((id, index) => [
+      prisma.datasetItem.create({ data: { datasetId, taskId: byId.get(id)!.id, position: firstPosition + index } }),
+      prisma.auditEvent.create({ data: { projectId: dataset.projectId, taskId: id, action: "TASK_ADDED_TO_DATASET", metadata: { datasetId, datasetName: dataset.name } } }),
+    ]));
   } catch {
     return { error: "Could not add the selected tasks. Please try again." };
   }
   revalidatePath(`/dashboard/datasets/${datasetId}`);
+  revalidatePath(`/dashboard/projects/${dataset.projectId}`);
+  revalidatePath("/dashboard/activity");
   return {};
 }
 

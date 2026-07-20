@@ -49,6 +49,7 @@ export async function createProject(input: ProjectInput): Promise<ActionResult> 
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/activity");
   redirect(`/dashboard/projects/${project.id}`);
 }
 
@@ -74,6 +75,7 @@ export async function createTask(projectId: string, input: TaskInput): Promise<A
   }
 
   revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/dashboard/activity");
   redirect(`/dashboard/projects/${projectId}/tasks/${task.id}`);
 }
 
@@ -96,6 +98,7 @@ export async function updateTask(taskId: string, projectId: string, input: TaskI
 
   revalidatePath(`/dashboard/projects/${projectId}`);
   revalidatePath(`/dashboard/projects/${projectId}/tasks/${taskId}`);
+  revalidatePath("/dashboard/activity");
   redirect(`/dashboard/projects/${projectId}/tasks/${taskId}`);
 }
 
@@ -127,6 +130,7 @@ export async function duplicateTask(taskId: string): Promise<ActionResult> {
   }
 
   revalidatePath(`/dashboard/projects/${source.projectId}`);
+  revalidatePath("/dashboard/activity");
   redirect(`/dashboard/projects/${source.projectId}/tasks/${duplicate.id}`);
 }
 
@@ -158,7 +162,7 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const result: BulkTaskResult = { succeeded: [], failures: [] };
   const dataset = operation === "ADD_TO_DATASET"
-    ? await prisma.dataset.findUnique({ where: { id: parsed.data.datasetId }, select: { id: true, projectId: true, items: { select: { taskId: true, position: true } } } })
+    ? await prisma.dataset.findUnique({ where: { id: parsed.data.datasetId }, select: { id: true, name: true, projectId: true, items: { select: { taskId: true, position: true } } } })
     : null;
   if (operation === "ADD_TO_DATASET" && !dataset) return { ...result, error: "Dataset not found." };
   const datasetTaskIds = new Set(dataset?.items.map((item) => item.taskId));
@@ -200,7 +204,10 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
       } else if (datasetTaskIds.has(task.id)) {
         error = "Task is already in this dataset.";
       } else {
-        await prisma.datasetItem.create({ data: { datasetId: dataset!.id, taskId: task.id, position: nextPosition } });
+        await prisma.$transaction([
+          prisma.datasetItem.create({ data: { datasetId: dataset!.id, taskId: task.id, position: nextPosition } }),
+          prisma.auditEvent.create({ data: { projectId: task.projectId, taskId: task.id, action: "TASK_ADDED_TO_DATASET", metadata: { datasetId: dataset!.id, datasetName: dataset!.name } } }),
+        ]);
         datasetTaskIds.add(task.id);
         nextPosition += 1;
       }
@@ -216,6 +223,7 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
   revalidatePath("/dashboard/review");
   for (const projectId of new Set(tasks.map((task) => task.projectId))) revalidatePath(`/dashboard/projects/${projectId}`);
   if (dataset) revalidatePath(`/dashboard/datasets/${dataset.id}`);
+  revalidatePath("/dashboard/activity");
   return result;
 }
 
@@ -241,14 +249,17 @@ export async function runVerification(taskId: string, candidate: string): Promis
   };
 
   try {
-    await prisma.verificationRun.create({
-      data: { taskId, candidate: parsedCandidate.data, passed: result.passed, details },
-    });
+    await prisma.$transaction([
+      prisma.verificationRun.create({ data: { taskId, candidate: parsedCandidate.data, passed: result.passed, details } }),
+      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: "VERIFICATION_EXECUTED", metadata: { passed: result.passed, reward: result.reward, executionTimeMs: result.executionTimeMs } } }),
+    ]);
   } catch {
     return { error: "Verification ran, but the result could not be saved." };
   }
 
   revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${task.id}`);
+  revalidatePath(`/dashboard/projects/${task.projectId}`);
+  revalidatePath("/dashboard/activity");
   return { result };
 }
 
@@ -283,6 +294,8 @@ export async function changeTaskStatus(taskId: string, action: ReviewAction, com
 
   revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${taskId}`);
   revalidatePath("/dashboard/review");
+  revalidatePath(`/dashboard/projects/${task.projectId}`);
+  revalidatePath("/dashboard/activity");
   return {};
 }
 

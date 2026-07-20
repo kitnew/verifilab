@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
+import { AuditTimeline } from "@/components/audit-timeline";
 import { DeleteTaskButton } from "@/components/delete-task-button";
 import { DuplicateTaskButton } from "@/components/duplicate-task-button";
 import { ReviewControls } from "@/components/review-controls";
@@ -22,6 +23,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
         project: { select: { name: true } },
         verificationRuns: { orderBy: { createdAt: "desc" }, take: 10 },
         reviewComments: { orderBy: { createdAt: "desc" } },
+        auditEvents: { orderBy: { createdAt: "desc" }, take: 50 },
       },
     }),
     getDemoRole(),
@@ -50,6 +52,8 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
         <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review workflow</h2><p className="mt-1 text-sm text-slate-500">Actions are enforced for the current demo role: {role[0]}{role.slice(1).toLowerCase()}.</p></CardHeader>
         <CardContent><ReviewControls taskId={taskId} status={task.status} role={role} /></CardContent>
       </Card>
+
+      <Card><CardHeader><h2 className="text-lg font-semibold text-slate-950">Task activity</h2><p className="mt-1 text-sm text-slate-500">Latest 50 audit events for this task.</p></CardHeader><CardContent><AuditTimeline events={task.auditEvents} /></CardContent></Card>
 
       <Card>
         <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review comments</h2><p className="mt-1 text-sm text-slate-500">Reviewer feedback and rejection reasons.</p></CardHeader>

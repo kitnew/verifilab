@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { ChevronLeft, FileText, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
+import { AuditTimeline } from "@/components/audit-timeline";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { getDemoRole } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
@@ -11,7 +12,7 @@ import { can } from "@/lib/review";
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const [project, role] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } } } }),
+    prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } }, auditEvents: { orderBy: { createdAt: "desc" }, take: 50, include: { task: { select: { id: true, title: true } } } } } }),
     getDemoRole(),
   ]);
   if (!project) notFound();
@@ -33,6 +34,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           ))}</tbody></table></div>
         </Card>
       )}
+      <Card><CardHeader><h2 className="font-semibold text-slate-950">Project activity</h2><p className="mt-1 text-sm text-slate-500">Latest 50 audit events for this project.</p></CardHeader><CardContent><AuditTimeline events={project.auditEvents.map((event) => ({ ...event, project: { id: project.id, name: project.name } }))} showTask /></CardContent></Card>
     </div>
   );
 }

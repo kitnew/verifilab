@@ -51,6 +51,9 @@ describe("runVerification", () => {
     expect(mocks.createRun).toHaveBeenCalledWith({
       data: expect.objectContaining({ taskId: "task-1", candidate: " bucharest ", passed: true }),
     });
+    expect(mocks.createAudit).toHaveBeenCalledWith({
+      data: expect.objectContaining({ projectId: "project-1", taskId: "task-1", action: "VERIFICATION_EXECUTED", metadata: expect.objectContaining({ passed: true, reward: 1 }) }),
+    });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/dashboard/projects/project-1/tasks/task-1");
   });
 
@@ -81,7 +84,7 @@ describe("runVerification", () => {
       verifierType: "NUMERIC",
       verifierConfig: { expected: 42, tolerance: 0 },
     });
-    mocks.createRun.mockRejectedValue(new Error("database unavailable"));
+    mocks.transaction.mockRejectedValueOnce(new Error("database unavailable"));
 
     expect(await runVerification("task-1", "42")).toEqual({
       error: "Verification ran, but the result could not be saved.",
