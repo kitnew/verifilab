@@ -3,6 +3,7 @@
 VerifiLab is a monolithic Next.js workspace for authoring deterministic evaluation tasks, testing model rollouts, reviewing results, curating datasets, and exporting immutable JSONL releases.
 
 ![Dashboard workflow and quality metrics](./docs/assets/screenshot-dashboard.png)
+[![CI](https://github.com/kitnew/verifilab/actions/workflows/ci.yml/badge.svg)](https://github.com/kitnew/verifilab/actions/workflows/ci.yml)
 
 ## Core workflow
 
