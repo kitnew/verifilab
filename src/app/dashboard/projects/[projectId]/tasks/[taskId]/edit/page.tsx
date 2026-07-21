@@ -3,7 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { TaskForm } from "@/components/task-form";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getProjectActor } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditAssignedTask } from "@/lib/review";
 import type { TaskInput } from "@/lib/validation";

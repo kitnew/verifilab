@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   findVerifierVersion: vi.fn(),
   createVerifierVersion: vi.fn(),
   transaction: vi.fn(),
-  getDemoRole: vi.fn().mockResolvedValue("REVIEWER"),
   getProjectActor: vi.fn().mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" }),
   revalidatePath: vi.fn(),
   redirect: vi.fn(),
@@ -24,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-user", getDemoRole: mocks.getDemoRole, getProjectActor: mocks.getProjectActor }));
+vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: "admin", isAdmin: true }), getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     project: { findUnique: mocks.projectFindUnique },
@@ -127,7 +126,6 @@ describe("verifier version actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getDemoRole.mockResolvedValue("AUTHOR");
     mocks.getProjectActor.mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" });
     mocks.transaction.mockResolvedValue([]);
   });
@@ -192,7 +190,6 @@ describe("verifier version actions", () => {
 describe("changeTaskStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getDemoRole.mockResolvedValue("REVIEWER");
     mocks.getProjectActor.mockResolvedValue({ id: "reviewer", name: "Riley Reviewer", role: "REVIEWER" });
   });
 
@@ -214,7 +211,6 @@ describe("duplicateTask", () => {
   });
 
   it("creates an isolated draft copy with an audit event", async () => {
-    mocks.getDemoRole.mockResolvedValue("AUTHOR");
     mocks.findUnique.mockResolvedValue({
       projectId: "project-1",
       title: "Original",
@@ -249,7 +245,6 @@ describe("duplicateTask", () => {
 describe("bulkTaskAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getDemoRole.mockResolvedValue("AUTHOR");
     mocks.transaction.mockResolvedValue([]);
   });
 

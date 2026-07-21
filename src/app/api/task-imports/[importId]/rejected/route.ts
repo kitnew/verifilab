@@ -1,7 +1,9 @@
 import Papa from "papaparse";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(_: Request, { params }: { params: Promise<{ importId: string }> }) {
+  if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   const { importId } = await params;
   const record = await prisma.taskImport.findUnique({ where: { id: importId }, select: { id: true, rejectedRows: true } });
   if (!record) return Response.json({ error: "Import not found." }, { status: 404 });

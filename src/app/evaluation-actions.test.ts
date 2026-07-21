@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const taskFindUnique = vi.fn(); const batchFindUnique = vi.fn(); const batchCreate = vi.fn(); const batchUpdate = vi.fn(); const batchUpdateMany = vi.fn(); const batchDelete = vi.fn(); const resultCount = vi.fn(); const resultFindMany = vi.fn(); const resultUpdateMany = vi.fn(); const auditCreate = vi.fn(); const transaction = vi.fn(); const revalidatePath = vi.fn(); const getDemoRole = vi.fn();
+  const taskFindUnique = vi.fn(); const batchFindUnique = vi.fn(); const batchCreate = vi.fn(); const batchUpdate = vi.fn(); const batchUpdateMany = vi.fn(); const batchDelete = vi.fn(); const resultCount = vi.fn(); const resultFindMany = vi.fn(); const resultUpdateMany = vi.fn(); const auditCreate = vi.fn(); const transaction = vi.fn(); const revalidatePath = vi.fn(); const getProjectActor = vi.fn();
   const tx = { evaluationBatch: { create: batchCreate, update: batchUpdate }, evaluationResult: { findMany: resultFindMany, updateMany: resultUpdateMany }, auditEvent: { create: auditCreate } };
-  return { taskFindUnique, batchFindUnique, batchCreate, batchUpdate, batchUpdateMany, batchDelete, resultCount, resultFindMany, resultUpdateMany, auditCreate, transaction, revalidatePath, getDemoRole, tx };
+  return { taskFindUnique, batchFindUnique, batchCreate, batchUpdate, batchUpdateMany, batchDelete, resultCount, resultFindMany, resultUpdateMany, auditCreate, transaction, revalidatePath, getProjectActor, tx };
 });
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("@/lib/demo-role", () => ({ getDemoRole: mocks.getDemoRole }));
+vi.mock("@/lib/auth", () => ({ getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({ prisma: { task: { findUnique: mocks.taskFindUnique }, evaluationBatch: { findUnique: mocks.batchFindUnique, updateMany: mocks.batchUpdateMany, delete: mocks.batchDelete }, evaluationResult: { count: mocks.resultCount }, auditEvent: { create: mocks.auditCreate }, $transaction: mocks.transaction } }));
 
 import { cancelEvaluationBatch, createEvaluationBatch, deleteEvaluationBatch, rerunEvaluationResults, retryEvaluationBatch } from "./evaluation-actions";
 
 describe("evaluation actions", () => {
   beforeEach(() => {
-    vi.clearAllMocks(); mocks.getDemoRole.mockResolvedValue("AUTHOR"); mocks.transaction.mockImplementation(async (input) => typeof input === "function" ? input(mocks.tx) : Promise.all(input)); mocks.batchUpdateMany.mockResolvedValue({ count: 1 }); mocks.batchUpdate.mockResolvedValue({}); mocks.resultUpdateMany.mockResolvedValue({ count: 1 }); mocks.resultFindMany.mockResolvedValue([]); mocks.auditCreate.mockResolvedValue({});
+    vi.clearAllMocks(); mocks.getProjectActor.mockResolvedValue({ id: "author", role: "AUTHOR" }); mocks.transaction.mockImplementation(async (input) => typeof input === "function" ? input(mocks.tx) : Promise.all(input)); mocks.batchUpdateMany.mockResolvedValue({ count: 1 }); mocks.batchUpdate.mockResolvedValue({}); mocks.resultUpdateMany.mockResolvedValue({ count: 1 }); mocks.resultFindMany.mockResolvedValue([]); mocks.auditCreate.mockResolvedValue({});
   });
 
   it("creates results with an immutable verifier snapshot and duplicate count", async () => {
@@ -45,7 +45,7 @@ describe("evaluation actions", () => {
   });
 
   it("does not delete running batches", async () => {
-    mocks.getDemoRole.mockResolvedValue("ADMIN"); mocks.batchFindUnique.mockResolvedValue({ id: "batch-1", name: "Run", status: "RUNNING", taskId: "task-1", task: { projectId: "project-1" }, _count: { results: 2 } });
+    mocks.getProjectActor.mockResolvedValue({ id: "admin", role: "ADMIN" }); mocks.batchFindUnique.mockResolvedValue({ id: "batch-1", name: "Run", status: "RUNNING", taskId: "task-1", task: { projectId: "project-1" }, _count: { results: 2 } });
     expect(await deleteEvaluationBatch("batch-1")).toEqual({ error: "Cannot delete a running batch." });
     expect(mocks.batchDelete).not.toHaveBeenCalled();
   });

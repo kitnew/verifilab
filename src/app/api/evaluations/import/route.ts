@@ -1,7 +1,9 @@
+import { getCurrentUser } from "@/lib/auth";
 import { MAX_EVALUATION_FILE_BYTES } from "@/lib/evaluation";
 import { parseCsvImport, parseJsonlImport } from "@/lib/evaluation-import";
 
 export async function POST(request: Request) {
+  if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   try {
     const form = await request.formData();
     const file = form.get("file");

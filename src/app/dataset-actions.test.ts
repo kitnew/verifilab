@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("@/lib/demo-role", () => ({ getProjectActor: mocks.getProjectActor }));
+vi.mock("@/lib/auth", () => ({ getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({ prisma: { dataset: { findUnique: mocks.findDataset }, $transaction: mocks.transaction } }));
 
 import { createDatasetRelease } from "./dataset-actions";

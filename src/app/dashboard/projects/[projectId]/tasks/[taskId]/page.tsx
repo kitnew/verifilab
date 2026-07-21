@@ -10,7 +10,7 @@ import { VerificationPlayground } from "@/components/verification-playground";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getProjectActor } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can, canEditAssignedTask } from "@/lib/review";
 import { storedVerifierSchema } from "@/lib/validation";
@@ -63,7 +63,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
       </Card>
 
       <Card>
-        <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review workflow</h2><p className="mt-1 text-sm text-slate-500">Actions are enforced for the current demo role: {role[0]}{role.slice(1).toLowerCase()}.</p></CardHeader>
+        <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review workflow</h2><p className="mt-1 text-sm text-slate-500">Actions are enforced for your project role: {role[0]}{role.slice(1).toLowerCase()}.</p></CardHeader>
         <CardContent>{actor ? <ReviewControls taskId={taskId} status={task.status} role={role} userId={actor.id} assignedAuthorId={task.assignedAuthorId} assignedReviewerId={task.assignedReviewerId} /> : <p className="text-sm text-slate-500">You are not a member of this project.</p>}</CardContent>
       </Card>
 

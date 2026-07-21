@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth";
 import { datasetReleaseContentDisposition, datasetReleaseItemSchema, releaseSplits, serializeDatasetRelease, type ReleaseExportScope } from "@/lib/dataset-release";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request, { params }: { params: Promise<{ releaseId: string }> }) {
+  if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   const split = new URL(request.url).searchParams.get("split") ?? "all";
   if (split !== "all" && !releaseSplits.includes(split as typeof releaseSplits[number])) return new Response("Split must be all, train, validation, or test.", { status: 400 });
   const { releaseId } = await params;

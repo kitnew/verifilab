@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { COOKIE_NAME, getDemoUser, getProjectActor } from "@/lib/demo-role";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
@@ -16,18 +15,10 @@ const assignmentSchema = z.object({
   dueDate: z.union([z.literal(""), z.iso.date()]),
 });
 
-export async function setDemoUser(userId: string): Promise<Result> {
-  const parsed = z.string().min(1).safeParse(userId);
-  if (!parsed.success || !await prisma.user.findUnique({ where: { id: parsed.data }, select: { id: true } })) return { error: "Invalid demo user." };
-  (await cookies()).set(COOKIE_NAME, parsed.data, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
-  revalidatePath("/dashboard", "layout");
-  return {};
-}
-
 export async function setProjectMembership(projectId: string, userId: string, role: string): Promise<Result> {
   const parsedRole = roleSchema.safeParse(role);
   if (!parsedRole.success) return { error: "Invalid project role." };
-  const actor = await getDemoUser();
+  const actor = await getCurrentUser();
   if (!actor?.isAdmin) return { error: "Only an administrator can manage project memberships." };
   const [project, user, previous] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, select: { id: true } }),

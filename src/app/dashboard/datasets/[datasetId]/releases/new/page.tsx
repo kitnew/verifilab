@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DatasetReleaseForm } from "@/components/dataset-release-form";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getProjectActor } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 

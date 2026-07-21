@@ -7,13 +7,14 @@ import { z } from "zod";
 import { datasetExportItems, datasetSchema, datasetTaskIdsSchema, datasetUpdateSchema, isDatasetEligible, type DatasetInput } from "@/lib/dataset";
 import { analyzeDatasetQuality } from "@/lib/dataset-quality";
 import { createDatasetReleaseItems, datasetReleaseSchema, releaseSplitCounts, releaseVersionIsUnique } from "@/lib/dataset-release";
-import { getProjectActor } from "@/lib/demo-role";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
 export type DatasetActionResult = { error?: string; releaseId?: string };
 
 export async function createDataset(input: DatasetInput): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const parsed = datasetSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const project = await prisma.project.findUnique({ where: { id: parsed.data.projectId }, select: { id: true } });
@@ -36,6 +37,7 @@ export async function createDataset(input: DatasetInput): Promise<DatasetActionR
 }
 
 export async function updateDataset(datasetId: string, input: Omit<DatasetInput, "projectId">): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const parsed = datasetUpdateSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const dataset = await prisma.dataset.findUnique({ where: { id: datasetId }, select: { id: true } });
@@ -52,6 +54,7 @@ export async function updateDataset(datasetId: string, input: Omit<DatasetInput,
 }
 
 export async function addTasksToDataset(datasetId: string, taskIds: string[]): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const parsedIds = datasetTaskIdsSchema.safeParse([...new Set(taskIds)]);
   if (!parsedIds.success) return { error: parsedIds.error.issues[0].message };
   const dataset = await prisma.dataset.findUnique({ where: { id: datasetId }, include: { items: { select: { taskId: true, position: true } } } });
@@ -80,6 +83,7 @@ export async function addTasksToDataset(datasetId: string, taskIds: string[]): P
 }
 
 export async function removeTaskFromDataset(datasetId: string, taskId: string): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   try {
     const removed = await prisma.datasetItem.deleteMany({ where: { datasetId, taskId } });
     if (!removed.count) return { error: "Dataset item not found." };
@@ -91,6 +95,7 @@ export async function removeTaskFromDataset(datasetId: string, taskId: string): 
 }
 
 export async function duplicateDataset(datasetId: string): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const source = await prisma.dataset.findUnique({ where: { id: datasetId }, include: { items: { orderBy: { position: "asc" } } } });
   if (!source) return { error: "Dataset not found." };
 
@@ -112,6 +117,7 @@ export async function duplicateDataset(datasetId: string): Promise<DatasetAction
 }
 
 export async function snapshotDataset(datasetId: string): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const dataset = await prisma.dataset.findUnique({
     where: { id: datasetId },
     include: {
@@ -132,6 +138,7 @@ export async function snapshotDataset(datasetId: string): Promise<DatasetActionR
 }
 
 export async function runDatasetQualityScan(datasetId: string): Promise<DatasetActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const parsedId = z.string().min(1).safeParse(datasetId);
   if (!parsedId.success) return { error: "Invalid dataset ID." };
   const dataset = await prisma.dataset.findUnique({

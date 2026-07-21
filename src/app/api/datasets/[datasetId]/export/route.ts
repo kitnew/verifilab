@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth";
 import { datasetContentDisposition, serializeDataset, type ExportFormat } from "@/lib/dataset";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request, { params }: { params: Promise<{ datasetId: string }> }) {
+  if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   const format = new URL(request.url).searchParams.get("format");
   if (format !== "json" && format !== "jsonl") return new Response("Format must be json or jsonl.", { status: 400 });
   const { datasetId } = await params;

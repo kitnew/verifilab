@@ -1,9 +1,11 @@
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth";
 import { evaluationContentDisposition, serializeEvaluation, type EvaluationExportFormat } from "@/lib/evaluation-export";
 import { evaluationResultStatuses } from "@/lib/evaluation";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request, { params }: { params: Promise<{ batchId: string }> }) {
+  if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   const { batchId } = await params;
   const search = new URL(request.url).searchParams;
   const format = search.get("format");

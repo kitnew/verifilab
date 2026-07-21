@@ -2,7 +2,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { getProjectActor } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/auth";
 import { generateTasks, generationFingerprint, generationRequestSchema, selectedGenerationSchema, type GeneratedTask, type GenerationRequest } from "@/lib/generation";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { getProjectActor } from "@/lib/demo-role";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { isDatasetEligible } from "@/lib/dataset";
 import { prisma } from "@/lib/prisma";
 import { can, canEditAssignedTask, canReviewAssignedTask, reviewTransition, type ReviewAction } from "@/lib/review";
@@ -33,6 +33,7 @@ function invalid(error: { flatten: () => { fieldErrors: Record<string, string[]>
 }
 
 export async function createProject(input: ProjectInput): Promise<ActionResult> {
+  if (!await getCurrentUser()) return { error: "Authentication required." };
   const parsed = projectSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
@@ -280,6 +281,7 @@ export async function runVerification(taskId: string, candidate: string): Promis
     select: { id: true, projectId: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } },
   });
   if (!task) return { error: "Task not found." };
+  if (!await getProjectActor(task.projectId)) return { error: "You cannot run verification for this project." };
   const active = task.verifierVersions[0];
   if (!active) return { error: "Task has no verifier version." };
 

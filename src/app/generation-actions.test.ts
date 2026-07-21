@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateTasks, generationFingerprint } from "@/lib/generation";
 
 const mocks = vi.hoisted(() => ({
-  getDemoRole: vi.fn().mockResolvedValue("AUTHOR"),
   getProjectActor: vi.fn().mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" }),
   projectFindUnique: vi.fn(),
   jobCreate: vi.fn(),
@@ -15,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("@/lib/demo-role", () => ({ getDemoRole: mocks.getDemoRole, getProjectActor: mocks.getProjectActor }));
+vi.mock("@/lib/auth", () => ({ getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   project: { findUnique: mocks.projectFindUnique },
   generationJob: { create: mocks.jobCreate, findUnique: mocks.jobFindUnique, update: mocks.jobUpdate },
@@ -30,7 +29,6 @@ const request = { projectId: "project-1", generatorType: "ARITHMETIC" as const, 
 describe("generation actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getDemoRole.mockResolvedValue("AUTHOR");
     mocks.projectFindUnique.mockResolvedValue({ id: "project-1" });
     mocks.jobCreate.mockResolvedValue({ id: "job-1" });
     mocks.jobUpdate.mockResolvedValue({});

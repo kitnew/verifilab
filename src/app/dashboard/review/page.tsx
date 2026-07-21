@@ -5,7 +5,7 @@ import { WorkflowAssignmentControls } from "@/components/workflow-assignment-con
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getDemoUser } from "@/lib/demo-role";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const statuses = ["DRAFT", "IN_PROGRESS", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED"] as const;
@@ -13,7 +13,7 @@ const priorities = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 const selectClass = "h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm";
 
 export default async function CuratorWorkflowPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const [user, query] = await Promise.all([getDemoUser(), searchParams]);
+  const [user, query] = await Promise.all([getCurrentUser(), searchParams]);
   if (!user) return <p>No demo user is available.</p>;
   const curated = user.isAdmin ? await prisma.project.findMany({ select: { id: true, name: true } }) : await prisma.project.findMany({ where: { memberships: { some: { userId: user.id, role: "CURATOR" } } }, select: { id: true, name: true } });
   if (!curated.length) return <Card><CardContent className="py-12 text-center"><h1 className="text-xl font-semibold">Curator access required</h1><p className="mt-2 text-sm text-slate-500">Use My Work for personal author and reviewer assignments.</p></CardContent></Card>;

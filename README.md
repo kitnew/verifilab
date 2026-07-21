@@ -14,6 +14,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+Before the first sign-in, replace `BOOTSTRAP_ADMIN_PASSWORD` in `.env` with a strong password. Sign in as `admin`; the first successful login stores a scrypt hash in the database, so later changes to the environment value have no effect. The admin can create contributor accounts under **User accounts**.
+
 ## Checks
 
 ```bash

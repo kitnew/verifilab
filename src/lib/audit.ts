@@ -1,4 +1,5 @@
 const labels: Record<string, string> = {
+  ACCOUNT_CREATED: "Account created",
   PROJECT_CREATED: "Project created",
   TASK_CREATED: "Task created",
   TASK_UPDATED: "Task updated",

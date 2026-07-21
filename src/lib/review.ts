@@ -24,8 +24,8 @@ const transitions: Record<TaskStatus, Partial<Record<ReviewAction, { to: TaskSta
   REJECTED: {},
 };
 
-export function can(role: Role, permission: Permission) {
-  return permissions[role].includes(permission);
+export function can(role: Role | null | undefined, permission: Permission) {
+  return role ? permissions[role].includes(permission) : false;
 }
 
 export function reviewTransition(status: TaskStatus, action: ReviewAction, role: Role, comment = "") {

@@ -2,6 +2,7 @@ import Papa from "papaparse";
 import { expect, it, vi } from "vitest";
 
 const findUnique = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: "user" }) }));
 vi.mock("@/lib/prisma", () => ({ prisma: { taskImport: { findUnique } } }));
 
 import { GET } from "./route";

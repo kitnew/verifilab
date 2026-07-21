@@ -2,12 +2,12 @@ import Link from "next/link";
 import { ListTodo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getDemoUser } from "@/lib/demo-role";
+import { getCurrentUser } from "@/lib/auth";
 import { myWorkSections } from "@/lib/my-work";
 import { prisma } from "@/lib/prisma";
 
 export default async function MyWorkPage() {
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
   if (!user) return <p>No demo user is available. Seed the database first.</p>;
   const tasks = await prisma.task.findMany({
     where: { OR: [{ assignedAuthorId: user.id }, { assignedReviewerId: user.id }] },

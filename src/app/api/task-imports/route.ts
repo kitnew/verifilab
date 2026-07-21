@@ -1,10 +1,11 @@
 import { revalidatePath } from "next/cache";
-import { getProjectActor } from "@/lib/demo-role";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { can } from "@/lib/review";
 import { columnMappingSchema, inspectTaskImport, MAX_TASK_IMPORT_BYTES, taskImportFormat } from "@/lib/task-import";
 import { confirmProjectTaskImport, previewProjectTaskImport, TaskImportError } from "@/lib/task-import-service";
 
 export async function POST(request: Request) {
+  if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   try {
     const contentLength = Number(request.headers.get("content-length"));
     if (Number.isFinite(contentLength) && contentLength > MAX_TASK_IMPORT_BYTES + 100_000) return Response.json({ error: "File is too large." }, { status: 413 });

@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   await prisma.project.deleteMany();
   const demoUsers = await Promise.all([
-    prisma.user.upsert({ where: { email: "admin@verifilab.local" }, update: { name: "Ada Admin", isAdmin: true }, create: { id: "demo-admin", name: "Ada Admin", email: "admin@verifilab.local", isAdmin: true } }),
+    prisma.user.upsert({ where: { email: "admin@verifilab.local" }, update: { name: "Ada Admin", username: "admin", isAdmin: true }, create: { id: "demo-admin", name: "Ada Admin", email: "admin@verifilab.local", username: "admin", isAdmin: true } }),
     prisma.user.upsert({ where: { email: "author@verifilab.local" }, update: { name: "Ari Author" }, create: { id: "demo-author", name: "Ari Author", email: "author@verifilab.local" } }),
     prisma.user.upsert({ where: { email: "reviewer@verifilab.local" }, update: { name: "Riley Reviewer" }, create: { id: "demo-reviewer", name: "Riley Reviewer", email: "reviewer@verifilab.local" } }),
     prisma.user.upsert({ where: { email: "curator@verifilab.local" }, update: { name: "Casey Curator" }, create: { id: "demo-curator", name: "Casey Curator", email: "curator@verifilab.local" } }),

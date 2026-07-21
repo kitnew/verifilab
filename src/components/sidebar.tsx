@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { Activity, ClipboardCheck, Database, FileSearch, FlaskConical, FolderKanban, LayoutDashboard, ListTodo, Sparkles, TestTube2, Upload } from "lucide-react";
-import { setDemoUser } from "@/app/workflow-actions";
+import { usePathname } from "next/navigation";
+import { Activity, ClipboardCheck, Database, FileSearch, FlaskConical, FolderKanban, LayoutDashboard, ListTodo, LogOut, Sparkles, TestTube2, Upload, Users } from "lucide-react";
+import { logout } from "@/app/auth-actions";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -20,11 +19,9 @@ const links = [
   { href: "/dashboard/activity", label: "Activity", icon: Activity },
 ];
 
-export function Sidebar({ userId, users }: { userId: string; users: { id: string; name: string; label: string }[] }) {
+export function Sidebar({ user }: { user: { name: string; username: string | null; isAdmin: boolean } }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [error, setError] = useState("");
-  const [pending, startTransition] = useTransition();
+  const visibleLinks = user.isAdmin ? [...links, { href: "/dashboard/admin/users", label: "User accounts", icon: Users }] : links;
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-slate-950 text-white md:flex md:flex-col">
@@ -33,29 +30,14 @@ export function Sidebar({ userId, users }: { userId: string; users: { id: string
         <span><strong className="block text-base">VerifiLab</strong><span className="text-xs text-slate-400">RLVR workspace</span></span>
       </Link>
       <nav className="space-y-1 p-4" aria-label="Primary navigation">
-        {links.map(({ href, label, icon: Icon }, index) => {
+        {visibleLinks.map(({ href, label, icon: Icon }, index) => {
           const active = index === 0 ? pathname === "/dashboard" : href !== "/dashboard" && pathname.startsWith(href);
           return <Link key={label} href={href} className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white", active && "bg-white/10 text-white")}><Icon className="size-4" />{label}</Link>;
         })}
       </nav>
       <div className="mt-auto border-t border-white/10 p-4">
-        <label htmlFor="demo-user" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Demo user</label>
-        <select
-          id="demo-user"
-          value={userId}
-          disabled={pending}
-          onChange={(event) => startTransition(async () => {
-            setError("");
-            const result = await setDemoUser(event.target.value);
-            if (result.error) return setError(result.error);
-            router.refresh();
-          })}
-          className="h-9 w-full rounded-lg border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-400"
-        >
-          {users.map((user) => <option className="text-slate-950" key={user.id} value={user.id}>{user.name} · {user.label.toLowerCase()}</option>)}
-        </select>
-        {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
-        <p className="mt-3 text-xs leading-5 text-slate-400">Demo only · No authentication</p>
+        <p className="font-semibold">{user.name}</p><p className="mt-1 text-xs text-slate-400">@{user.username}</p>
+        <form action={logout}><button className="mt-4 flex items-center gap-2 text-sm text-slate-300 hover:text-white" type="submit"><LogOut className="size-4" />Sign out</button></form>
       </div>
     </aside>
   );

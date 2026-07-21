@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getDemoUser: vi.fn(),
+  getCurrentUser: vi.fn(),
   getProjectActor: vi.fn(),
   taskFind: vi.fn(),
   taskUpdate: vi.fn(),
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
-vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-user", getDemoUser: mocks.getDemoUser, getProjectActor: mocks.getProjectActor }));
+vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.getCurrentUser, getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   task: { findUnique: mocks.taskFind, update: mocks.taskUpdate },
   projectMembership: { findUnique: mocks.membershipFind, findMany: mocks.membershipFindMany, upsert: mocks.membershipUpsert },
@@ -60,7 +60,7 @@ describe("workflow assignment", () => {
 
 describe("project membership roles", () => {
   it("allows an admin to add or change a project-scoped role and audits it", async () => {
-    mocks.getDemoUser.mockResolvedValue({ id: "admin", isAdmin: true });
+    mocks.getCurrentUser.mockResolvedValue({ id: "admin", isAdmin: true });
     mocks.projectFind.mockResolvedValue({ id: "project" });
     mocks.userFind.mockResolvedValue({ id: "author", name: "Ari" });
     mocks.membershipFind.mockResolvedValue({ role: "REVIEWER" });

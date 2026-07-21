@@ -114,12 +114,28 @@ model User {
   id            String              @id @default(cuid())
   name          String
   email         String              @unique
+  username      String?             @unique
+  passwordHash  String?
+  isActive      Boolean             @default(true)
   isAdmin       Boolean             @default(false)
   memberships   ProjectMembership[]
   authoredTasks Task[]              @relation("TaskAuthor")
   reviewedTasks Task[]              @relation("TaskReviewer")
+  sessions      Session[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model ProjectMembership {

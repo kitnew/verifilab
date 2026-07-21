@@ -2,7 +2,7 @@
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { getDemoRole } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/auth";
 import { createVerifierSnapshot, duplicateResponseCount, evaluationBatchSchema, removeDuplicateResponses, rerunRequestSchema, rerunStatuses } from "@/lib/evaluation";
 import { syncEvaluationCounters } from "@/lib/evaluation-service";
 import { prisma } from "@/lib/prisma";
@@ -12,12 +12,12 @@ import { storedVerifierSchema } from "@/lib/validation";
 export type EvaluationActionResult = { error?: string; batchId?: string; affected?: number };
 
 export async function createEvaluationBatch(input: unknown): Promise<EvaluationActionResult> {
-  const role = await getDemoRole();
-  if (!can(role, "CREATE_TASK")) return { error: "Your demo role cannot create evaluation batches." };
   const parsed = evaluationBatchSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const task = await prisma.task.findUnique({ where: { id: parsed.data.taskId }, select: { id: true, projectId: true, title: true, prompt: true, verifierType: true, verifierConfig: true, updatedAt: true } });
   if (!task) return { error: "Task not found." };
+  const actor = await getProjectActor(task.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "Your account cannot create evaluation batches." };
   const verifier = storedVerifierSchema.safeParse({ type: task.verifierType, config: task.verifierConfig });
   if (!verifier.success) return { error: "This task has an invalid verifier configuration." };
 
@@ -49,7 +49,7 @@ export async function createEvaluationBatch(input: unknown): Promise<EvaluationA
         verifierConfigSnapshot: snapshot.verifierConfig as Prisma.InputJsonValue,
         taskUpdatedAtSnapshot: snapshot.taskUpdatedAt,
         importFingerprint: parsed.data.importFingerprint || null,
-        createdBy: role,
+        createdBy: actor.role,
         results: { create: candidates.map((candidate, index) => ({
           sequenceNumber: index + 1,
           candidateResponse: candidate.response,
@@ -74,9 +74,10 @@ export async function createEvaluationBatch(input: unknown): Promise<EvaluationA
 }
 
 export async function queueEvaluationBatch(batchId: string): Promise<EvaluationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot run evaluations." };
   const batch = await prisma.evaluationBatch.findUnique({ where: { id: batchId }, select: { id: true, status: true, taskId: true, task: { select: { projectId: true } } } });
   if (!batch) return { error: "Evaluation batch not found." };
+  const actor = await getProjectActor(batch.task.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "Your account cannot run evaluations." };
   if (batch.status !== "DRAFT") return { error: "Only draft batches can be started." };
   const updated = await prisma.evaluationBatch.updateMany({ where: { id: batchId, status: "DRAFT" }, data: { status: "QUEUED", errorMessage: null } });
   if (updated.count !== 1) return { error: "Batch state changed. Refresh and try again." };
@@ -85,9 +86,10 @@ export async function queueEvaluationBatch(batchId: string): Promise<EvaluationA
 }
 
 export async function cancelEvaluationBatch(batchId: string): Promise<EvaluationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot cancel evaluations." };
   const batch = await prisma.evaluationBatch.findUnique({ where: { id: batchId }, select: { id: true, status: true, taskId: true, task: { select: { projectId: true } } } });
   if (!batch) return { error: "Evaluation batch not found." };
+  const actor = await getProjectActor(batch.task.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "Your account cannot cancel evaluations." };
   if (!(["DRAFT", "QUEUED", "RUNNING"] as const).includes(batch.status as "DRAFT" | "QUEUED" | "RUNNING")) return { error: `Cannot cancel a ${batch.status.toLowerCase()} batch.` };
   const updated = await prisma.evaluationBatch.updateMany({ where: { id: batchId, status: batch.status }, data: { status: "CANCELLED", completedAt: new Date() } });
   if (updated.count !== 1) return { error: "Batch state changed. Refresh and try again." };
@@ -97,9 +99,10 @@ export async function cancelEvaluationBatch(batchId: string): Promise<Evaluation
 }
 
 export async function retryEvaluationBatch(batchId: string): Promise<EvaluationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot retry evaluations." };
   const batch = await prisma.evaluationBatch.findUnique({ where: { id: batchId }, select: { id: true, status: true, taskId: true, importInvalidCount: true, requestedCount: true, task: { select: { projectId: true } } } });
   if (!batch) return { error: "Evaluation batch not found." };
+  const actor = await getProjectActor(batch.task.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "Your account cannot retry evaluations." };
   if (batch.status !== "FAILED" && batch.status !== "CANCELLED") return { error: "Only failed or cancelled batches can be retried." };
   await prisma.$transaction(async (transaction) => {
     await transaction.evaluationResult.updateMany({ where: { evaluationBatchId: batch.id, status: "RUNNING" }, data: { status: "PENDING" } });
@@ -111,11 +114,12 @@ export async function retryEvaluationBatch(batchId: string): Promise<EvaluationA
 }
 
 export async function rerunEvaluationResults(input: unknown): Promise<EvaluationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot rerun evaluations." };
   const parsed = rerunRequestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const batch = await prisma.evaluationBatch.findUnique({ where: { id: parsed.data.batchId }, select: { id: true, status: true, taskId: true, importInvalidCount: true, requestedCount: true, task: { select: { projectId: true } } } });
   if (!batch) return { error: "Evaluation batch not found." };
+  const actor = await getProjectActor(batch.task.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "Your account cannot rerun evaluations." };
   if (batch.status === "RUNNING" || batch.status === "QUEUED") return { error: "Wait for the current evaluation run to finish." };
   const where: Prisma.EvaluationResultWhereInput = parsed.data.mode === "SELECTED"
     ? { evaluationBatchId: batch.id, id: { in: parsed.data.resultIds } }
@@ -134,9 +138,10 @@ export async function rerunEvaluationResults(input: unknown): Promise<Evaluation
 }
 
 export async function deleteEvaluationBatch(batchId: string): Promise<EvaluationActionResult> {
-  if (!can(await getDemoRole(), "DELETE_TASK")) return { error: "Your demo role cannot delete evaluation batches." };
   const batch = await prisma.evaluationBatch.findUnique({ where: { id: batchId }, select: { id: true, name: true, status: true, taskId: true, task: { select: { projectId: true } }, _count: { select: { results: true } } } });
   if (!batch) return { error: "Evaluation batch not found." };
+  const actor = await getProjectActor(batch.task.projectId);
+  if (!actor || !can(actor.role, "DELETE_TASK")) return { error: "Your account cannot delete evaluation batches." };
   if (batch.status === "RUNNING" || batch.status === "QUEUED" || batch.status === "FAILED") return { error: `Cannot delete a ${batch.status.toLowerCase()} batch.` };
   await prisma.$transaction([
     prisma.auditEvent.create({ data: { projectId: batch.task.projectId, taskId: batch.taskId, action: "EVALUATION_BATCH_DELETED", metadata: { evaluationBatchId: batch.id, batchName: batch.name, resultCount: batch._count.results } } }),
