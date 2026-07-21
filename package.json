@@ -9,10 +9,13 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "quality": "npm run lint && npm run typecheck && npm test && npm run build",
     "load:smoke": "k6 run -e VFL_PROFILE=smoke load/k6/verifilab.js",
     "load:baseline": "k6 run -e VFL_PROFILE=baseline load/k6/verifilab.js",
     "load:stress": "k6 run -e VFL_PROFILE=stress load/k6/verifilab.js",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed"
   },
   "prisma": {
@@ -27,13 +30,16 @@
     "lucide-react": "^1.25.0",
     "next": "16.2.10",
     "papaparse": "^5.5.4",
+    "prisma": "^6.19.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.82.0",
     "tailwind-merge": "^3.6.0",
+    "tsx": "^4.23.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/papaparse": "^5.5.2",
@@ -41,9 +47,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
-    "prisma": "^6.19.3",
     "tailwindcss": "^4",
-    "tsx": "^4.23.1",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

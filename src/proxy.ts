@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_COOKIE = "verifilab-session";
 
 export function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/api/v1/")) return NextResponse.next();
+  if (["/api/health", "/api/meta"].includes(request.nextUrl.pathname) || request.nextUrl.pathname.startsWith("/api/v1/")) return NextResponse.next();
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
   if (request.nextUrl.pathname.startsWith("/api/")) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   return NextResponse.redirect(new URL("/login", request.url));

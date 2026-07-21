@@ -39,6 +39,16 @@ export default async function DashboardPage() {
         <Link href="/dashboard/projects/new" className={buttonVariants()}><Plus className="mr-2 size-4" />New project</Link>
       </div>
 
+      <Card className="border-indigo-200 bg-indigo-50/40">
+        <CardHeader><h2 className="font-semibold text-slate-950">From prompt to versioned dataset</h2><p className="mt-1 text-sm text-slate-600">The complete VerifiLab workflow, in one pass.</p></CardHeader>
+        <CardContent><ol className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          <li><Link className="font-semibold text-indigo-700 hover:underline" href="/dashboard/generation">1. Author or generate tasks</Link><p className="mt-1 text-slate-500">Define deterministic verifiers.</p></li>
+          <li><Link className="font-semibold text-indigo-700 hover:underline" href="/dashboard/evaluations">2. Evaluate rollouts</Link><p className="mt-1 text-slate-500">Compare candidate responses.</p></li>
+          <li><Link className="font-semibold text-indigo-700 hover:underline" href="/dashboard/review">3. Review and approve</Link><p className="mt-1 text-slate-500">Capture human decisions.</p></li>
+          <li><Link className="font-semibold text-indigo-700 hover:underline" href="/dashboard/datasets">4. Curate and release</Link><p className="mt-1 text-slate-500">Export immutable JSONL.</p></li>
+        </ol></CardContent>
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat icon={FolderKanban} label="Projects" value={projects.length} />
         <Stat icon={TestTube2} label="Tasks" value={taskCount} />

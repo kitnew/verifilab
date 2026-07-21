@@ -3,6 +3,11 @@ import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
 
 describe("proxy", () => {
+  it.each(["/api/health", "/api/meta"])("keeps %s public", (path) => {
+    const response = proxy(new NextRequest(`http://localhost${path}`));
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("leaves bearer API authentication to the v1 route", () => {
     const response = proxy(new NextRequest("http://localhost/api/v1/tasks"));
     expect(response.headers.get("x-middleware-next")).toBe("1");
