@@ -97,33 +97,48 @@ enum TaskImportStatus {
 }
 
 model Project {
-  id             String              @id @default(cuid())
-  name           String
-  description    String              @default("")
-  tasks          Task[]
-  datasets       Dataset[]
-  auditEvents    AuditEvent[]
-  generationJobs GenerationJob[]
-  taskImports    TaskImport[]
-  memberships    ProjectMembership[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id               String              @id @default(cuid())
+  name             String
+  description      String              @default("")
+  tasks            Task[]
+  datasets         Dataset[]
+  auditEvents      AuditEvent[]
+  generationJobs   GenerationJob[]
+  taskImports      TaskImport[]
+  memberships      ProjectMembership[]
+  guestWorkspaceId String?
+  guestWorkspace   GuestWorkspace?     @relation(fields: [guestWorkspaceId], references: [id], onDelete: Cascade)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([guestWorkspaceId])
 }
 
 model User {
-  id            String              @id @default(cuid())
-  name          String
-  email         String              @unique
-  username      String?             @unique
-  passwordHash  String?
-  isActive      Boolean             @default(true)
-  isAdmin       Boolean             @default(false)
-  memberships   ProjectMembership[]
-  authoredTasks Task[]              @relation("TaskAuthor")
-  reviewedTasks Task[]              @relation("TaskReviewer")
-  sessions      Session[]
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  id               String              @id @default(cuid())
+  name             String
+  email            String              @unique
+  username         String?             @unique
+  passwordHash     String?
+  isActive         Boolean             @default(true)
+  isAdmin          Boolean             @default(false)
+  memberships      ProjectMembership[]
+  authoredTasks    Task[]              @relation("TaskAuthor")
+  reviewedTasks    Task[]              @relation("TaskReviewer")
+  sessions         Session[]
+  guestWorkspaceId String?
+  guestWorkspace   GuestWorkspace?     @relation(fields: [guestWorkspaceId], references: [id], onDelete: Cascade)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([guestWorkspaceId])
+}
+
+model GuestWorkspace {
+  id        String    @id @default(cuid())
+  users     User[]
+  projects  Project[]
+  createdAt DateTime  @default(now())
 }
 
 model Session {

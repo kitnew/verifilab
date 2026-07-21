@@ -2,9 +2,11 @@ import Link from "next/link";
 import { Database, Plus } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function DatasetsPage() {
-  const datasets = await prisma.dataset.findMany({ include: { project: { select: { name: true } }, _count: { select: { items: true, versions: true } } }, orderBy: { updatedAt: "desc" } });
+  const user = await getCurrentUser();
+  const datasets = await prisma.dataset.findMany({ where: { project: { guestWorkspaceId: user?.guestWorkspaceId ?? null } }, include: { project: { select: { name: true } }, _count: { select: { items: true, versions: true } } }, orderBy: { updatedAt: "desc" } });
   return <div className="space-y-7"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1 text-sm font-semibold text-indigo-600">Collections</p><h1 className="text-3xl font-bold tracking-tight text-slate-950">Datasets</h1><p className="mt-2 text-slate-500">Curate approved tasks and create immutable versions.</p></div><Link href="/dashboard/datasets/new" className={buttonVariants()}><Plus className="mr-2 size-4" />New dataset</Link></div>{datasets.length === 0 ? <Card className="border-dashed"><CardContent className="flex flex-col items-center py-16 text-center"><Database className="mb-4 size-10 text-slate-300" /><h2 className="font-semibold">No datasets yet</h2><p className="mt-1 text-sm text-slate-500">Create a dataset to curate approved tasks.</p><Link href="/dashboard/datasets/new" className={buttonVariants({ className: "mt-5" })}>Create dataset</Link></CardContent></Card> : <div className="grid gap-4 lg:grid-cols-2">{datasets.map((dataset) => <Link key={dataset.id} href={`/dashboard/datasets/${dataset.id}`}><Card className="h-full transition hover:border-indigo-200 hover:shadow-md"><CardHeader><h2 className="text-lg font-semibold text-slate-950">{dataset.name}</h2><p className="mt-1 text-sm text-slate-500">{dataset.description || "No description"}</p></CardHeader><CardContent className="flex gap-4 text-xs text-slate-500"><span>{dataset.project.name}</span><span>{dataset._count.items} tasks</span><span>{dataset._count.versions} versions</span></CardContent></Card></Link>)}</div>}</div>;
 }

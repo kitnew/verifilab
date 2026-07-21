@@ -7,10 +7,10 @@ import { prisma } from "@/lib/prisma";
 
 export default async function UsersPage() {
   const admin = await getCurrentUser();
-  if (!admin?.isAdmin) redirect("/dashboard");
+  if (!admin || !admin.isAdmin && !(admin.guestWorkspaceId && admin.role === "ADMIN")) redirect("/dashboard");
   const [projects, users] = await Promise.all([
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.user.findMany({ where: { username: { not: null } }, orderBy: { name: "asc" }, select: { id: true, name: true, username: true, isAdmin: true, isActive: true, memberships: { include: { project: { select: { name: true } } } } } }),
+    prisma.project.findMany({ where: { guestWorkspaceId: admin.guestWorkspaceId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.user.findMany({ where: { guestWorkspaceId: admin.guestWorkspaceId, username: { not: null } }, orderBy: { name: "asc" }, select: { id: true, name: true, username: true, isAdmin: true, isActive: true, memberships: { include: { project: { select: { name: true } } } } } }),
   ]);
   return <div className="space-y-7"><div><p className="mb-1 text-sm font-semibold text-indigo-600">Administration</p><h1 className="text-3xl font-bold">User accounts</h1><p className="mt-2 text-slate-500">Create login credentials and the account&apos;s first project role.</p></div>
     <Card><CardHeader><h2 className="font-semibold">New account</h2><p className="mt-1 text-sm text-slate-500">Passwords require 12 characters, a letter and a number.</p></CardHeader><CardContent><AccountForm projects={projects} /></CardContent></Card>

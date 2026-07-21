@@ -33,15 +33,19 @@ function invalid(error: { flatten: () => { fieldErrors: Record<string, string[]>
 }
 
 export async function createProject(input: ProjectInput): Promise<ActionResult> {
-  if (!await getCurrentUser()) return { error: "Authentication required." };
+  const user = await getCurrentUser();
+  if (!user) return { error: "Authentication required." };
   const parsed = projectSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
+  const guestMembers = user.guestWorkspaceId ? await prisma.user.findMany({ where: { guestWorkspaceId: user.guestWorkspaceId }, select: { id: true, memberships: { select: { role: true }, take: 1 } } }) : [];
 
   let project;
   try {
     project = await prisma.project.create({
       data: {
         ...parsed.data,
+        guestWorkspaceId: user.guestWorkspaceId,
+        ...(guestMembers.length ? { memberships: { create: guestMembers.map((member) => ({ userId: member.id, role: member.memberships[0].role })) } } : {}),
         auditEvents: { create: { action: "PROJECT_CREATED", metadata: {} } },
       },
     });

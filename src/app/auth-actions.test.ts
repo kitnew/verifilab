@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => {
   const membershipCreate = vi.fn();
   const auditCreate = vi.fn();
   return {
-    getCurrentUser: vi.fn(), createSession: vi.fn(), destroySession: vi.fn(),
+    getCurrentUser: vi.fn(), getProjectActor: vi.fn(), createSession: vi.fn(), createGuestSession: vi.fn(), destroySession: vi.fn(), switchGuestRole: vi.fn(),
     findUser: vi.fn(), updateUser: vi.fn(), findProject: vi.fn(), transaction: vi.fn(),
     hashPassword: vi.fn(), verifyPassword: vi.fn(), safeSecretEqual: vi.fn(),
     redirect: vi.fn(), revalidatePath: vi.fn(), userCreate, membershipCreate, auditCreate,
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/lib/auth", () => ({ createSession: mocks.createSession, destroySession: mocks.destroySession, getCurrentUser: mocks.getCurrentUser }));
+vi.mock("@/lib/auth", () => ({ createSession: mocks.createSession, createGuestSession: mocks.createGuestSession, destroySession: mocks.destroySession, getCurrentUser: mocks.getCurrentUser, getProjectActor: mocks.getProjectActor, switchGuestRole: mocks.switchGuestRole }));
 vi.mock("@/lib/password", () => ({ hashPassword: mocks.hashPassword, verifyPassword: mocks.verifyPassword, safeSecretEqual: mocks.safeSecretEqual }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   user: { findUnique: mocks.findUser, update: mocks.updateUser },
@@ -23,7 +23,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
 } }));
 
-import { createAccount, login } from "./auth-actions";
+import { changeGuestRole, createAccount, guestLogin, login } from "./auth-actions";
 
 function form(values: Record<string, string>) {
   const data = new FormData();
@@ -52,6 +52,15 @@ describe("account authentication", () => {
 
     expect(await login({}, form({ username: "author.one", password: "Password12345" }))).toEqual(undefined);
     expect(mocks.createSession).toHaveBeenCalledWith("user-1");
+    expect(mocks.redirect).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("creates a temporary guest session and switches its mock role", async () => {
+    await guestLogin();
+    await changeGuestRole(form({ role: "REVIEWER" }));
+
+    expect(mocks.createGuestSession).toHaveBeenCalledOnce();
+    expect(mocks.switchGuestRole).toHaveBeenCalledWith("REVIEWER");
     expect(mocks.redirect).toHaveBeenCalledWith("/dashboard");
   });
 

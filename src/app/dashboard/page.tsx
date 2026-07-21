@@ -5,20 +5,23 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { percentage } from "@/lib/dashboard";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const statuses = ["DRAFT", "IN_PROGRESS", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED"] as const;
 const verifiers = ["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"] as const;
 
 export default async function DashboardPage() {
+  const user = await getCurrentUser();
+  const project = { guestWorkspaceId: user?.guestWorkspaceId ?? null };
   const [projects, statusGroups, verifierGroups, verificationGroups, datasetCount, recentActivity, recentTasks] = await Promise.all([
-    prisma.project.findMany({ select: { id: true, name: true, description: true, updatedAt: true, _count: { select: { tasks: true } } }, orderBy: { updatedAt: "desc" } }),
-    prisma.task.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.task.groupBy({ by: ["verifierType"], _count: { _all: true } }),
-    prisma.verificationRun.groupBy({ by: ["passed"], _count: { _all: true } }),
-    prisma.dataset.count(),
-    prisma.auditEvent.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { project: { select: { id: true, name: true } }, task: { select: { id: true, title: true } } } }),
-    prisma.task.findMany({ orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, projectId: true, title: true, status: true, updatedAt: true, project: { select: { name: true } } } }),
+    prisma.project.findMany({ where: project, select: { id: true, name: true, description: true, updatedAt: true, _count: { select: { tasks: true } } }, orderBy: { updatedAt: "desc" } }),
+    prisma.task.groupBy({ by: ["status"], where: { project }, _count: { _all: true } }),
+    prisma.task.groupBy({ by: ["verifierType"], where: { project }, _count: { _all: true } }),
+    prisma.verificationRun.groupBy({ by: ["passed"], where: { task: { project } }, _count: { _all: true } }),
+    prisma.dataset.count({ where: { project } }),
+    prisma.auditEvent.findMany({ where: { project }, orderBy: { createdAt: "desc" }, take: 5, include: { project: { select: { id: true, name: true } }, task: { select: { id: true, title: true } } } }),
+    prisma.task.findMany({ where: { project }, orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, projectId: true, title: true, status: true, updatedAt: true, project: { select: { name: true } } } }),
   ]);
   const statusCounts = new Map(statusGroups.map((group) => [group.status, group._count._all]));
   const verifierCounts = new Map(verifierGroups.map((group) => [group.verifierType, group._count._all]));

@@ -61,6 +61,7 @@ describe("workflow assignment", () => {
 describe("project membership roles", () => {
   it("allows an admin to add or change a project-scoped role and audits it", async () => {
     mocks.getCurrentUser.mockResolvedValue({ id: "admin", isAdmin: true });
+    mocks.getProjectActor.mockResolvedValue({ id: "admin", name: "Ada", role: "ADMIN" });
     mocks.projectFind.mockResolvedValue({ id: "project" });
     mocks.userFind.mockResolvedValue({ id: "author", name: "Ari" });
     mocks.membershipFind.mockResolvedValue({ role: "REVIEWER" });

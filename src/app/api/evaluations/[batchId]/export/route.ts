@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { evaluationContentDisposition, serializeEvaluation, type EvaluationExportFormat } from "@/lib/evaluation-export";
 import { evaluationResultStatuses } from "@/lib/evaluation";
 import { prisma } from "@/lib/prisma";
@@ -22,6 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ batc
       },
     });
     if (!batch) return new Response("Evaluation batch not found.", { status: 404 });
+    if (!await getProjectActor(batch.task.projectId)) return new Response("Evaluation batch not found.", { status: 404 });
     const content = serializeEvaluation(batch, format as EvaluationExportFormat);
     await prisma.auditEvent.create({ data: { projectId: batch.task.projectId, taskId: batch.taskId, action: "EVALUATION_EXPORTED", metadata: { evaluationBatchId: batch.id, format, status: status || "ALL", resultCount: batch.results.length } } });
     revalidatePath("/dashboard/activity");

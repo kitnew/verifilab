@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Activity, ClipboardCheck, Database, FileSearch, FlaskConical, FolderKanban, LayoutDashboard, ListTodo, LogOut, Sparkles, TestTube2, Upload, Users } from "lucide-react";
-import { logout } from "@/app/auth-actions";
+import { changeGuestRole, logout } from "@/app/auth-actions";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -19,9 +19,9 @@ const links = [
   { href: "/dashboard/activity", label: "Activity", icon: Activity },
 ];
 
-export function Sidebar({ user }: { user: { name: string; username: string | null; isAdmin: boolean } }) {
+export function Sidebar({ user }: { user: { name: string; username: string | null; isAdmin: boolean; guestWorkspaceId: string | null; role: string | null } }) {
   const pathname = usePathname();
-  const visibleLinks = user.isAdmin ? [...links, { href: "/dashboard/admin/users", label: "User accounts", icon: Users }] : links;
+  const visibleLinks = user.isAdmin || user.guestWorkspaceId && user.role === "ADMIN" ? [...links, { href: "/dashboard/admin/users", label: "User accounts", icon: Users }] : links;
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-slate-950 text-white md:flex md:flex-col">
@@ -36,7 +36,8 @@ export function Sidebar({ user }: { user: { name: string; username: string | nul
         })}
       </nav>
       <div className="mt-auto border-t border-white/10 p-4">
-        <p className="font-semibold">{user.name}</p><p className="mt-1 text-xs text-slate-400">@{user.username}</p>
+        <p className="font-semibold">{user.name}</p><p className="mt-1 text-xs text-slate-400">{user.username ? `@${user.username}` : "Temporary guest"}</p>
+        {user.guestWorkspaceId && <form action={changeGuestRole} className="mt-4 flex gap-2"><select aria-label="Mock role" className="min-w-0 flex-1 rounded bg-slate-800 px-2 text-sm" defaultValue={user.role ?? "ADMIN"} name="role"><option>ADMIN</option><option>AUTHOR</option><option>REVIEWER</option><option>CURATOR</option></select><button className="rounded bg-indigo-500 px-2 text-sm" type="submit">Switch</button></form>}
         <form action={logout}><button className="mt-4 flex items-center gap-2 text-sm text-slate-300 hover:text-white" type="submit"><LogOut className="size-4" />Sign out</button></form>
       </div>
     </aside>

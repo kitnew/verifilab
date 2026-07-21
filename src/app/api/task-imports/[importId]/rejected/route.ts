@@ -1,12 +1,13 @@
 import Papa from "papaparse";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(_: Request, { params }: { params: Promise<{ importId: string }> }) {
   if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
   const { importId } = await params;
-  const record = await prisma.taskImport.findUnique({ where: { id: importId }, select: { id: true, rejectedRows: true } });
+  const record = await prisma.taskImport.findUnique({ where: { id: importId }, select: { id: true, projectId: true, rejectedRows: true } });
   if (!record) return Response.json({ error: "Import not found." }, { status: 404 });
+  if (!await getProjectActor(record.projectId)) return Response.json({ error: "Import not found." }, { status: 404 });
   const rows = rejectedRows(record.rejectedRows);
   const body = Papa.unparse(rows.map((row) => ({ rowNumber: row.rowNumber, errors: row.errors.join("; "), raw: row.raw })), { newline: "\n" });
   return new Response(body + (body ? "\n" : ""), { headers: {

@@ -1,10 +1,13 @@
 import { Activity } from "lucide-react";
 import { AuditTimeline } from "@/components/audit-timeline";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function ActivityPage() {
+  const user = await getCurrentUser();
   const events = await prisma.auditEvent.findMany({
+    where: { project: { guestWorkspaceId: user?.guestWorkspaceId ?? null } },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: { project: { select: { id: true, name: true } }, task: { select: { id: true, title: true } } },

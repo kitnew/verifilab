@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getCurrentUser } from "@/lib/auth";
 import { evaluationBatchStatuses } from "@/lib/evaluation";
 import { EVALUATION_PAGE_SIZE, evaluationSearchHref, evaluationSorts, parseEvaluationSearch } from "@/lib/evaluation-search";
 import { prisma } from "@/lib/prisma";
@@ -12,17 +13,18 @@ import { prisma } from "@/lib/prisma";
 const selectClass = "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
 export default async function EvaluationsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const user = await getCurrentUser();
   const search = parseEvaluationSearch(await searchParams);
   const where: Prisma.EvaluationBatchWhereInput = {
+    task: { project: { guestWorkspaceId: user?.guestWorkspaceId ?? null }, ...(search.projectId ? { projectId: search.projectId } : {}) },
     ...(search.q ? { OR: [{ name: { contains: search.q } }, { task: { title: { contains: search.q } } }] } : {}),
-    ...(search.projectId ? { task: { projectId: search.projectId } } : {}),
     ...(search.taskId ? { taskId: search.taskId } : {}),
     ...(search.status ? { status: search.status } : {}),
     ...(search.model ? { modelName: { contains: search.model } } : {}),
   };
   const [projects, tasks, total] = await Promise.all([
-    prisma.project.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.task.findMany({ select: { id: true, title: true }, orderBy: { title: "asc" } }),
+    prisma.project.findMany({ where: { guestWorkspaceId: user?.guestWorkspaceId ?? null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.task.findMany({ where: { project: { guestWorkspaceId: user?.guestWorkspaceId ?? null } }, select: { id: true, title: true }, orderBy: { title: "asc" } }),
     prisma.evaluationBatch.count({ where }),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / EVALUATION_PAGE_SIZE)); const page = Math.min(search.page, totalPages);

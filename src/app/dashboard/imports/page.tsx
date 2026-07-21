@@ -3,13 +3,16 @@ import { History } from "lucide-react";
 import { TaskImportStudio } from "@/components/task-import-studio";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canonicalTaskImportFields, MAX_TASK_IMPORT_BYTES, MAX_TASK_IMPORT_ROWS } from "@/lib/task-import";
 
 export default async function TaskImportsPage() {
+  const user = await getCurrentUser();
+  const project = { guestWorkspaceId: user?.guestWorkspaceId ?? null };
   const [projects, imports] = await Promise.all([
-    prisma.project.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.taskImport.findMany({ include: { project: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 50 }),
+    prisma.project.findMany({ where: project, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.taskImport.findMany({ where: { project }, include: { project: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 50 }),
   ]);
   return <div className="space-y-7"><div><p className="mb-1 text-sm font-semibold text-indigo-600">Authoring</p><h1 className="text-3xl font-bold tracking-tight text-slate-950">Bulk Import</h1><p className="mt-2 text-slate-500">Validate RLVR task files, inspect duplicates, then import drafts.</p></div>
     {projects.length ? <TaskImportStudio projects={projects} maxBytes={MAX_TASK_IMPORT_BYTES} maxRows={MAX_TASK_IMPORT_ROWS} fields={canonicalTaskImportFields} /> : <Card className="border-dashed"><CardContent className="py-12 text-center"><h2 className="font-semibold">Create a project first</h2><p className="mt-1 text-sm text-slate-500">Imports always target an existing project.</p></CardContent></Card>}

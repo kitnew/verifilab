@@ -5,6 +5,7 @@ import { BulkTaskTable } from "@/components/bulk-task-table";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   parseTaskSearchParams,
@@ -21,19 +22,21 @@ type PageProps = { searchParams: Promise<Record<string, string | string[] | unde
 const selectClass = "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
 export default async function TasksPage({ searchParams }: PageProps) {
+  const user = await getCurrentUser();
   const search = parseTaskSearchParams(await searchParams);
-  const conditions = taskConditions(search);
+  const projects = await prisma.project.findMany({ where: { guestWorkspaceId: user?.guestWorkspaceId ?? null }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const projectIds = projects.map((project) => project.id);
+  const conditions = taskConditions(search, projectIds);
   const where = Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
 
-  const [projects, tags, datasets, countRows] = await Promise.all([
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.$queryRaw<{ tag: string }[]>`
+  const [tags, datasets, countRows] = await Promise.all([
+    projectIds.length ? prisma.$queryRaw<{ tag: string }[]>`
       SELECT DISTINCT CAST(tag.value AS TEXT) AS tag
       FROM "Task" task, json_each(task.tags) tag
-      WHERE CAST(tag.value AS TEXT) <> ''
+      WHERE CAST(tag.value AS TEXT) <> '' AND task.projectId IN (${Prisma.join(projectIds)})
       ORDER BY tag COLLATE NOCASE ASC
-    `,
-    prisma.dataset.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, project: { select: { name: true } } } }),
+    ` : [],
+    prisma.dataset.findMany({ where: { projectId: { in: projectIds } }, orderBy: { name: "asc" }, select: { id: true, name: true, project: { select: { name: true } } } }),
     prisma.$queryRaw<{ total: bigint }[]>(Prisma.sql`
       SELECT COUNT(*) AS total FROM "Task" task ${where}
     `),
@@ -106,8 +109,8 @@ export default async function TasksPage({ searchParams }: PageProps) {
   );
 }
 
-function taskConditions(search: ReturnType<typeof parseTaskSearchParams>) {
-  const conditions: Prisma.Sql[] = [Prisma.sql`1 = 1`];
+function taskConditions(search: ReturnType<typeof parseTaskSearchParams>, projectIds: string[]) {
+  const conditions: Prisma.Sql[] = [projectIds.length ? Prisma.sql`task.projectId IN (${Prisma.join(projectIds)})` : Prisma.sql`0 = 1`];
   if (search.q) {
     const query = `%${search.q.toLowerCase()}%`;
     conditions.push(Prisma.sql`(LOWER(task.title) LIKE ${query} OR LOWER(task.prompt) LIKE ${query})`);

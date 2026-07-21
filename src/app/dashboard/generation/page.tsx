@@ -1,13 +1,16 @@
 import { GenerationStudio } from "@/components/generation-studio";
 import { Card, CardContent } from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/auth";
 import { generateTasks, generationFingerprint } from "@/lib/generation";
 import { prisma } from "@/lib/prisma";
 
 export default async function GenerationPage({ searchParams }: { searchParams: Promise<{ job?: string }> }) {
   const { job: jobId } = await searchParams;
+  const user = await getCurrentUser();
+  const project = { guestWorkspaceId: user?.guestWorkspaceId ?? null };
   const [projects, job] = await Promise.all([
-    prisma.project.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    jobId ? prisma.generationJob.findUnique({ where: { id: jobId } }) : null,
+    prisma.project.findMany({ where: project, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    jobId ? prisma.generationJob.findFirst({ where: { id: jobId, project } }) : null,
   ]);
   let initialTasks;
   if (job?.status === "COMPLETED") {

@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createSession, destroySession, getCurrentUser } from "@/lib/auth";
+import { createGuestSession, createSession, destroySession, getCurrentUser, getProjectActor, switchGuestRole } from "@/lib/auth";
 import { hashPassword, safeSecretEqual, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
@@ -42,17 +42,30 @@ export async function logout() {
   redirect("/login");
 }
 
+export async function guestLogin() {
+  await createGuestSession();
+  redirect("/dashboard");
+}
+
+export async function changeGuestRole(formData: FormData) {
+  const role = z.enum(["ADMIN", "AUTHOR", "REVIEWER", "CURATOR"]).safeParse(formData.get("role"));
+  if (role.success) await switchGuestRole(role.data);
+  redirect("/dashboard");
+}
+
 export async function createAccount(_: AuthState, formData: FormData): Promise<AuthState> {
   const admin = await getCurrentUser();
-  if (!admin?.isAdmin) return { error: "Administrator access required." };
+  if (!admin || !admin.isAdmin && !admin.guestWorkspaceId) return { error: "Administrator access required." };
   const parsed = accountSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const project = await prisma.project.findUnique({ where: { id: parsed.data.projectId }, select: { id: true } });
+  const project = await prisma.project.findUnique({ where: { id: parsed.data.projectId }, select: { id: true, guestWorkspaceId: true } });
   if (!project) return { error: "Project not found." };
+  const actor = admin ? await getProjectActor(project.id) : null;
+  if (!admin || project.guestWorkspaceId !== admin.guestWorkspaceId || !admin.isAdmin && actor?.role !== "ADMIN") return { error: "Administrator access required." };
   try {
     const passwordHash = await hashPassword(parsed.data.password);
     await prisma.$transaction(async (transaction) => {
-      const user = await transaction.user.create({ data: { name: parsed.data.name, username: parsed.data.username, email: `${parsed.data.username}@accounts.verifilab.local`, passwordHash } });
+      const user = await transaction.user.create({ data: { name: parsed.data.name, username: parsed.data.username, email: `${parsed.data.username}@accounts.verifilab.local`, passwordHash, guestWorkspaceId: admin.guestWorkspaceId } });
       await transaction.projectMembership.create({ data: { projectId: project.id, userId: user.id, role: parsed.data.role } });
       await transaction.auditEvent.create({ data: { projectId: project.id, action: "ACCOUNT_CREATED", metadata: { userId: user.id, userName: user.name, username: user.username, role: parsed.data.role, actorId: admin.id } } });
     });

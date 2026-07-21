@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), auditCreate: vi.fn(), revalidatePath: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: "user" }) }));
+vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: "user" }), getProjectActor: vi.fn().mockResolvedValue({ id: "user", role: "AUTHOR" }) }));
 vi.mock("@/lib/prisma", () => ({ prisma: { evaluationBatch: { findUnique: mocks.findUnique }, auditEvent: { create: mocks.auditCreate } } }));
 
 import { GET } from "./route";

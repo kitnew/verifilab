@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentUser, getProjectActor } from "@/lib/auth";
+import { getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
@@ -18,14 +18,14 @@ const assignmentSchema = z.object({
 export async function setProjectMembership(projectId: string, userId: string, role: string): Promise<Result> {
   const parsedRole = roleSchema.safeParse(role);
   if (!parsedRole.success) return { error: "Invalid project role." };
-  const actor = await getCurrentUser();
-  if (!actor?.isAdmin) return { error: "Only an administrator can manage project memberships." };
+  const actor = await getProjectActor(projectId);
+  if (!actor || actor.role !== "ADMIN") return { error: "Only an administrator can manage project memberships." };
   const [project, user, previous] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, select: { id: true } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { id: true, guestWorkspaceId: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, guestWorkspaceId: true } }),
     prisma.projectMembership.findUnique({ where: { projectId_userId: { projectId, userId } }, select: { role: true } }),
   ]);
-  if (!project || !user) return { error: "Project or user not found." };
+  if (!project || !user || project.guestWorkspaceId !== user.guestWorkspaceId) return { error: "Project or user not found." };
   try {
     await prisma.$transaction([
       prisma.projectMembership.upsert({

@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { datasetContentDisposition, serializeDataset, type ExportFormat } from "@/lib/dataset";
 import { prisma } from "@/lib/prisma";
 
@@ -13,6 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ data
     include: { items: { orderBy: { position: "asc" }, include: { task: { include: { project: { select: { id: true, name: true, description: true } } } } } } },
   });
   if (!dataset) return new Response("Dataset not found.", { status: 404 });
+  if (!await getProjectActor(dataset.projectId)) return new Response("Dataset not found.", { status: 404 });
   const content = serializeDataset(dataset.items, format as ExportFormat);
   await prisma.auditEvent.create({ data: { projectId: dataset.projectId, action: "DATASET_EXPORTED", metadata: { datasetId, datasetName: dataset.name, format } } });
   revalidatePath("/dashboard/activity");

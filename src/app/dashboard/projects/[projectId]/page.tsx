@@ -6,18 +6,19 @@ import { ProjectMemberships } from "@/components/project-memberships";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getProjectActor } from "@/lib/auth";
+import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
+  const currentUser = await getCurrentUser();
   const [project, actor, users] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } }, memberships: { include: { user: { select: { name: true } } }, orderBy: { user: { name: "asc" } } }, auditEvents: { orderBy: { createdAt: "desc" }, take: 50, include: { task: { select: { id: true, title: true } } } } } }),
     getProjectActor(projectId),
-    prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.user.findMany({ where: { guestWorkspaceId: currentUser?.guestWorkspaceId ?? null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
-  if (!project) notFound();
+  if (!project || !actor) notFound();
   const role = actor?.role ?? "AUTHOR";
 
   return (
