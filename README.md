@@ -25,6 +25,10 @@ npm test
 npm run build
 ```
 
+## Load testing
+
+Reproducible smoke, baseline and stress profiles are documented in [docs/load-testing.md](docs/load-testing.md). These runs establish an environment-specific baseline; they are not a production capacity claim.
+
 ## Evaluation execution architecture
 
 The local prototype evaluates bounded batches in-process and persists progress after each 25-result chunk. Batch and result status guards make retries idempotent and allow cancellation between chunks.

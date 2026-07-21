@@ -9,6 +9,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "load:smoke": "k6 run -e VFL_PROFILE=smoke load/k6/verifilab.js",
+    "load:baseline": "k6 run -e VFL_PROFILE=baseline load/k6/verifilab.js",
+    "load:stress": "k6 run -e VFL_PROFILE=stress load/k6/verifilab.js",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed"
   },
