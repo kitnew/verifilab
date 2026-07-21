@@ -17,13 +17,14 @@ const mocks = vi.hoisted(() => ({
   createVerifierVersion: vi.fn(),
   transaction: vi.fn(),
   getDemoRole: vi.fn().mockResolvedValue("REVIEWER"),
+  getProjectActor: vi.fn().mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" }),
   revalidatePath: vi.fn(),
   redirect: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-role", getDemoRole: mocks.getDemoRole }));
+vi.mock("@/lib/demo-role", () => ({ COOKIE_NAME: "verifilab-user", getDemoRole: mocks.getDemoRole, getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     project: { findUnique: mocks.projectFindUnique },
@@ -127,6 +128,7 @@ describe("verifier version actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getDemoRole.mockResolvedValue("AUTHOR");
+    mocks.getProjectActor.mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" });
     mocks.transaction.mockResolvedValue([]);
   });
 
@@ -191,21 +193,25 @@ describe("changeTaskStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getDemoRole.mockResolvedValue("REVIEWER");
+    mocks.getProjectActor.mockResolvedValue({ id: "reviewer", name: "Riley Reviewer", role: "REVIEWER" });
   });
 
   it("persists an approval comment in the review timeline", async () => {
-    mocks.findUnique.mockResolvedValue({ id: "task-1", projectId: "project-1", status: "IN_REVIEW" });
+    mocks.findUnique.mockResolvedValue({ id: "task-1", projectId: "project-1", status: "IN_REVIEW", assignedAuthorId: "author", assignedReviewerId: "reviewer" });
     mocks.transaction.mockResolvedValue([]);
 
     expect(await changeTaskStatus("task-1", "APPROVE", "  Looks good.  ")).toEqual({});
     expect(mocks.createComment).toHaveBeenCalledWith({
-      data: { taskId: "task-1", author: "Reviewer (demo)", body: "Looks good." },
+      data: { taskId: "task-1", author: "Riley Reviewer", body: "Looks good." },
     });
   });
 });
 
 describe("duplicateTask", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getProjectActor.mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" });
+  });
 
   it("creates an isolated draft copy with an audit event", async () => {
     mocks.getDemoRole.mockResolvedValue("AUTHOR");
@@ -249,7 +255,7 @@ describe("bulkTaskAction", () => {
 
   it("submits valid drafts and reports invalid task transitions", async () => {
     mocks.findManyTasks.mockResolvedValue([
-      { id: "draft", projectId: "project-1", title: "Draft", status: "DRAFT", tags: [] },
+      { id: "draft", projectId: "project-1", title: "Draft", status: "IN_PROGRESS", tags: [] },
       { id: "approved", projectId: "project-1", title: "Approved", status: "APPROVED", tags: [] },
     ]);
 

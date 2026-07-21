@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { percentage } from "@/lib/dashboard";
 import { prisma } from "@/lib/prisma";
 
-const statuses = ["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"] as const;
+const statuses = ["DRAFT", "IN_PROGRESS", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED"] as const;
 const verifiers = ["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"] as const;
 
 export default async function DashboardPage() {
@@ -68,7 +68,7 @@ function Breakdown({ title, total, items }: { title: string; total: number; item
 }
 
 function statusColor(status: typeof statuses[number]) {
-  return { DRAFT: "bg-slate-400", IN_REVIEW: "bg-amber-500", APPROVED: "bg-emerald-500", REJECTED: "bg-red-500" }[status];
+  return { DRAFT: "bg-slate-400", IN_PROGRESS: "bg-blue-500", IN_REVIEW: "bg-amber-500", CHANGES_REQUESTED: "bg-orange-500", APPROVED: "bg-emerald-500", REJECTED: "bg-red-500" }[status];
 }
 
 function label(value: string) {

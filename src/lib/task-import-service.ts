@@ -11,7 +11,7 @@ const snapshotSchema = z.object({
   verifierType: z.enum(["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"]),
   verifierConfig: z.unknown(),
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
-  status: z.enum(["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"]),
+  status: z.enum(["DRAFT", "IN_PROGRESS", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED"]),
   tags: z.unknown(),
 });
 const changesSchema = z.object({
@@ -24,7 +24,7 @@ export async function previewProjectTaskImport(projectId: string, content: strin
   return parseTaskImport(content, format, existing, mapping);
 }
 
-export async function confirmProjectTaskImport(input: { projectId: string; filename: string; content: string; format: TaskImportFormat; duplicateStrategy: DuplicateStrategy; mapping?: ColumnMapping }) {
+export async function confirmProjectTaskImport(input: { projectId: string; filename: string; content: string; format: TaskImportFormat; duplicateStrategy: DuplicateStrategy; mapping?: ColumnMapping; assignedAuthorId?: string }) {
   const existing = await projectTasks(input.projectId);
   const preview = parseTaskImport(input.content, input.format, existing, input.mapping);
   if (preview.error) throw new TaskImportError(preview.error);
@@ -59,6 +59,7 @@ export async function confirmProjectTaskImport(input: { projectId: string; filen
         verifierConfig,
         difficulty: task.difficulty,
         status: "DRAFT",
+        ...(input.assignedAuthorId ? { assignedAuthorId: input.assignedAuthorId, authorAssignedAt: new Date() } : {}),
         tags: task.tags,
         verifierVersions: { create: { version: 1, verifierType: task.verifierType, verifierConfig, changeSummary: "Initial version (bulk import)" } },
         auditEvents: { create: [

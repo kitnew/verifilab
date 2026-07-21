@@ -54,7 +54,7 @@ export const taskSchema = z
     prompt: z.string().trim().min(10, "Prompt must be at least 10 characters").max(10_000),
     verifierType: z.enum(["EXACT_MATCH", "NUMERIC", "REGEX", "JSON_SCHEMA"]),
     difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
-    status: z.enum(["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"]),
+    status: z.enum(["DRAFT", "IN_PROGRESS", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED"]),
     tags: z.string().max(300).default(""),
     expectedText: z.string().max(2_000).default(""),
     expectedNumber: z.string().default(""),

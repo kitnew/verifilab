@@ -3,6 +3,7 @@ import { generateTasks, generationFingerprint } from "@/lib/generation";
 
 const mocks = vi.hoisted(() => ({
   getDemoRole: vi.fn().mockResolvedValue("AUTHOR"),
+  getProjectActor: vi.fn().mockResolvedValue({ id: "admin", name: "Ada Admin", role: "ADMIN" }),
   projectFindUnique: vi.fn(),
   jobCreate: vi.fn(),
   jobFindUnique: vi.fn(),
@@ -14,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("@/lib/demo-role", () => ({ getDemoRole: mocks.getDemoRole }));
+vi.mock("@/lib/demo-role", () => ({ getDemoRole: mocks.getDemoRole, getProjectActor: mocks.getProjectActor }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   project: { findUnique: mocks.projectFindUnique },
   generationJob: { create: mocks.jobCreate, findUnique: mocks.jobFindUnique, update: mocks.jobUpdate },

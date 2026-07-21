@@ -5,7 +5,9 @@ import { AddDatasetTasks, DatasetActions, RemoveDatasetTask } from "@/components
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getProjectActor } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
+import { can } from "@/lib/review";
 
 const difficulties = ["EASY", "MEDIUM", "HARD"] as const;
 const verifierTypes = ["EXACT_MATCH", "NUMERIC", "REGEX"] as const;
@@ -22,6 +24,7 @@ export default async function DatasetPage({ params }: { params: Promise<{ datase
     },
   });
   if (!dataset) notFound();
+  const actor = await getProjectActor(dataset.projectId);
   const eligibleTasks = await prisma.task.findMany({
     where: { projectId: dataset.projectId, status: "APPROVED", datasetItems: { none: { datasetId } } },
     orderBy: { title: "asc" },
@@ -31,7 +34,7 @@ export default async function DatasetPage({ params }: { params: Promise<{ datase
   return <div className="space-y-7">
     <Link href="/dashboard/datasets" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />Datasets</Link>
     <nav aria-label="Dataset sections" className="flex gap-2"><span className={buttonVariants({ size: "sm" })}>Dataset</span><Link className={buttonVariants({ variant: "secondary", size: "sm" })} href={`/dashboard/datasets/${dataset.id}/quality`}>Quality</Link></nav>
-    <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><p className="mb-1 text-sm font-semibold text-indigo-600">{dataset.project.name}</p><h1 className="text-3xl font-bold tracking-tight">{dataset.name}</h1><p className="mt-2 max-w-2xl text-slate-500">{dataset.description || "No description"}</p></div><div className="flex flex-wrap gap-2"><Link href={`/dashboard/datasets/${datasetId}/releases/new`} className={buttonVariants()}>Create release</Link><Link href={`/api/datasets/${datasetId}/export?format=jsonl`} className={buttonVariants({ variant: "secondary" })}><Download className="mr-2 size-4" />JSONL</Link><Link href={`/api/datasets/${datasetId}/export?format=json`} className={buttonVariants({ variant: "secondary" })}><Download className="mr-2 size-4" />JSON</Link><Link href={`/dashboard/datasets/${datasetId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit</Link></div></div>
+    <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><p className="mb-1 text-sm font-semibold text-indigo-600">{dataset.project.name}</p><h1 className="text-3xl font-bold tracking-tight">{dataset.name}</h1><p className="mt-2 max-w-2xl text-slate-500">{dataset.description || "No description"}</p></div><div className="flex flex-wrap gap-2">{actor && can(actor.role, "CREATE_RELEASE") && <Link href={`/dashboard/datasets/${datasetId}/releases/new`} className={buttonVariants()}>Create release</Link>}<Link href={`/api/datasets/${datasetId}/export?format=jsonl`} className={buttonVariants({ variant: "secondary" })}><Download className="mr-2 size-4" />JSONL</Link><Link href={`/api/datasets/${datasetId}/export?format=json`} className={buttonVariants({ variant: "secondary" })}><Download className="mr-2 size-4" />JSON</Link><Link href={`/dashboard/datasets/${datasetId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit</Link></div></div>
 
     <DatasetActions datasetId={datasetId} />
 

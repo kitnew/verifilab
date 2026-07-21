@@ -22,9 +22,25 @@ enum Difficulty {
 
 enum TaskStatus {
   DRAFT
+  IN_PROGRESS
   IN_REVIEW
+  CHANGES_REQUESTED
   APPROVED
   REJECTED
+}
+
+enum ProjectRole {
+  ADMIN
+  AUTHOR
+  REVIEWER
+  CURATOR
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
 enum GeneratorType {
@@ -81,16 +97,43 @@ enum TaskImportStatus {
 }
 
 model Project {
-  id             String          @id @default(cuid())
+  id             String              @id @default(cuid())
   name           String
-  description    String          @default("")
+  description    String              @default("")
   tasks          Task[]
   datasets       Dataset[]
   auditEvents    AuditEvent[]
   generationJobs GenerationJob[]
   taskImports    TaskImport[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  memberships    ProjectMembership[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model User {
+  id            String              @id @default(cuid())
+  name          String
+  email         String              @unique
+  isAdmin       Boolean             @default(false)
+  memberships   ProjectMembership[]
+  authoredTasks Task[]              @relation("TaskAuthor")
+  reviewedTasks Task[]              @relation("TaskReviewer")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model ProjectMembership {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ProjectRole
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([userId, role])
 }
 
 model TaskImport {
@@ -126,6 +169,16 @@ model Task {
   verifierConfig        Json
   difficulty            Difficulty
   status                TaskStatus        @default(DRAFT)
+  priority              TaskPriority      @default(MEDIUM)
+  assignedAuthorId      String?
+  assignedAuthor        User?             @relation("TaskAuthor", fields: [assignedAuthorId], references: [id], onDelete: SetNull)
+  assignedReviewerId    String?
+  assignedReviewer      User?             @relation("TaskReviewer", fields: [assignedReviewerId], references: [id], onDelete: SetNull)
+  dueDate               DateTime?
+  authorAssignedAt      DateTime?
+  reviewerAssignedAt    DateTime?
+  submittedAt           DateTime?
+  completedAt           DateTime?
   tags                  Json
   expectedAnswer        String?
   generatorTemplate     GeneratorType?
@@ -145,6 +198,9 @@ model Task {
 
   @@unique([projectId, generationFingerprint])
   @@index([projectId])
+  @@index([assignedAuthorId, status])
+  @@index([assignedReviewerId, status])
+  @@index([dueDate, status])
   @@index([generationBatchId])
 }
 

@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { getDemoRole } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/demo-role";
 import { can } from "@/lib/review";
 import { columnMappingSchema, inspectTaskImport, MAX_TASK_IMPORT_BYTES, taskImportFormat } from "@/lib/task-import";
 import { confirmProjectTaskImport, previewProjectTaskImport, TaskImportError } from "@/lib/task-import-service";
@@ -34,10 +34,11 @@ export async function POST(request: Request) {
       return Response.json(preview, { status: preview.error ? 400 : 200 });
     }
     if (mode !== "confirm") return Response.json({ error: "Invalid import mode." }, { status: 400 });
-    if (!can(await getDemoRole(), "CREATE_TASK")) return Response.json({ error: "Your demo role cannot create tasks." }, { status: 403 });
+    const actor = await getProjectActor(projectId);
+    if (!actor || !can(actor.role, "CREATE_TASK")) return Response.json({ error: "You cannot import tasks into this project." }, { status: 403 });
     const strategy = form.get("duplicateStrategy");
     if (strategy !== "SKIP" && strategy !== "REPLACE" && strategy !== "CREATE_NEW") return Response.json({ error: "Choose a duplicate strategy." }, { status: 400 });
-    const result = await confirmProjectTaskImport({ projectId, filename: file.name, content, format, duplicateStrategy: strategy, mapping: parsedMapping.data });
+    const result = await confirmProjectTaskImport({ projectId, filename: file.name, content, format, duplicateStrategy: strategy, mapping: parsedMapping.data, assignedAuthorId: actor.role === "AUTHOR" ? actor.id : undefined });
     revalidatePath("/dashboard/imports");
     revalidatePath("/dashboard/tasks");
     revalidatePath(`/dashboard/projects/${projectId}`);

@@ -10,14 +10,14 @@ import { VerificationPlayground } from "@/components/verification-playground";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getDemoRole } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
-import { can } from "@/lib/review";
+import { can, canEditAssignedTask } from "@/lib/review";
 import { storedVerifierSchema } from "@/lib/validation";
 
 export default async function TaskPage({ params }: { params: Promise<{ projectId: string; taskId: string }> }) {
   const { projectId, taskId } = await params;
-  const [task, role] = await Promise.all([
+  const [task, actor] = await Promise.all([
     prisma.task.findFirst({
       where: { id: taskId, projectId },
       include: {
@@ -25,12 +25,15 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
         verifierVersions: { orderBy: { version: "desc" } },
         verificationRuns: { orderBy: { createdAt: "desc" }, take: 10, include: { verifierVersion: { select: { version: true } } } },
         reviewComments: { orderBy: { createdAt: "desc" } },
+        assignedAuthor: { select: { name: true } },
+        assignedReviewer: { select: { name: true } },
         auditEvents: { orderBy: { createdAt: "desc" }, take: 50 },
       },
     }),
-    getDemoRole(),
+    getProjectActor(projectId),
   ]);
   if (!task) notFound();
+  const role = actor?.role ?? "AUTHOR";
   const activeVerifier = task.verifierVersions[0];
   if (!activeVerifier) notFound();
   const tags = Array.isArray(task.tags) ? task.tags.filter((tag): tag is string => typeof tag === "string") : [];
@@ -41,7 +44,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
       <Link href={`/dashboard/projects/${projectId}`} className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />{task.project.name}</Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div><div className="mb-3 flex flex-wrap items-center gap-2"><Badge>{task.status}</Badge><span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label(task.difficulty)}</span></div><h1 className="text-3xl font-bold tracking-tight text-slate-950">{task.title}</h1><p className="mt-2 text-sm text-slate-500">Updated {task.updatedAt.toLocaleString()}</p></div>
-        <div className="flex flex-wrap gap-2">{can(role, "CREATE_TASK") && <Link href={`/dashboard/evaluations/new?task=${taskId}`} className={buttonVariants()}><FlaskConical className="mr-2 size-4" />Evaluate rollouts</Link>}{can(role, "CREATE_TASK") && <DuplicateTaskButton taskId={taskId} />}{can(role, "EDIT_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/${taskId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit task</Link>}</div>
+        <div className="flex flex-wrap gap-2">{can(role, "CREATE_TASK") && <Link href={`/dashboard/evaluations/new?task=${taskId}`} className={buttonVariants()}><FlaskConical className="mr-2 size-4" />Evaluate rollouts</Link>}{can(role, "CREATE_TASK") && <DuplicateTaskButton taskId={taskId} />}{actor && canEditAssignedTask(role, actor.id, task.assignedAuthorId) && <Link href={`/dashboard/projects/${projectId}/tasks/${taskId}/edit`} className={buttonVariants({ variant: "secondary" })}><Pencil className="mr-2 size-4" />Edit task</Link>}</div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
@@ -49,6 +52,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
         <div className="space-y-5">
           <Card><CardHeader><h2 className="font-semibold text-slate-950">Verifier</h2></CardHeader><CardContent><p className="mb-3 text-sm font-medium text-indigo-700">Version {activeVerifier.version} · {label(activeVerifier.verifierType)}</p><pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">{JSON.stringify(activeVerifier.verifierConfig, null, 2)}</pre></CardContent></Card>
           <Card><CardHeader><h2 className="font-semibold text-slate-950">Tags</h2></CardHeader><CardContent className="flex flex-wrap gap-2">{tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : <span className="text-sm text-slate-400">No tags</span>}</CardContent></Card>
+          <Card><CardHeader><h2 className="font-semibold text-slate-950">Assignment</h2></CardHeader><CardContent className="space-y-1 text-sm text-slate-600"><p>Author: {task.assignedAuthor?.name ?? "Unassigned"}</p><p>Reviewer: {task.assignedReviewer?.name ?? "Unassigned"}</p><p>Priority: {label(task.priority)}</p><p>Due: {task.dueDate?.toLocaleDateString() ?? "None"}</p></CardContent></Card>
           {task.generatorTemplate && <Card><CardHeader><h2 className="font-semibold text-slate-950">Generation</h2></CardHeader><CardContent className="space-y-1 text-sm text-slate-600"><p>{label(task.generatorTemplate)} · version {task.generatorVersion}</p><p>Seed: <span className="font-mono">{task.generationSeed}</span></p><p>Batch: <span className="font-mono text-xs">{task.generationBatchId}</span></p>{task.expectedAnswer && <p className="truncate" title={task.expectedAnswer}>Expected: <span className="font-mono text-xs">{task.expectedAnswer}</span></p>}</CardContent></Card>}
         </div>
       </div>
@@ -60,7 +64,7 @@ export default async function TaskPage({ params }: { params: Promise<{ projectId
 
       <Card>
         <CardHeader><h2 className="text-lg font-semibold text-slate-950">Review workflow</h2><p className="mt-1 text-sm text-slate-500">Actions are enforced for the current demo role: {role[0]}{role.slice(1).toLowerCase()}.</p></CardHeader>
-        <CardContent><ReviewControls taskId={taskId} status={task.status} role={role} /></CardContent>
+        <CardContent>{actor ? <ReviewControls taskId={taskId} status={task.status} role={role} userId={actor.id} assignedAuthorId={task.assignedAuthorId} assignedReviewerId={task.assignedReviewerId} /> : <p className="text-sm text-slate-500">You are not a member of this project.</p>}</CardContent>
       </Card>
 
       <Card><CardHeader><h2 className="text-lg font-semibold text-slate-950">Task activity</h2><p className="mt-1 text-sm text-slate-500">Latest 50 audit events for this task.</p></CardHeader><CardContent><AuditTimeline events={task.auditEvents} /></CardContent></Card>

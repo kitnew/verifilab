@@ -5,11 +5,24 @@ const prisma = new PrismaClient();
 
 async function main() {
   await prisma.project.deleteMany();
+  const demoUsers = await Promise.all([
+    prisma.user.upsert({ where: { email: "admin@verifilab.local" }, update: { name: "Ada Admin", isAdmin: true }, create: { id: "demo-admin", name: "Ada Admin", email: "admin@verifilab.local", isAdmin: true } }),
+    prisma.user.upsert({ where: { email: "author@verifilab.local" }, update: { name: "Ari Author" }, create: { id: "demo-author", name: "Ari Author", email: "author@verifilab.local" } }),
+    prisma.user.upsert({ where: { email: "reviewer@verifilab.local" }, update: { name: "Riley Reviewer" }, create: { id: "demo-reviewer", name: "Riley Reviewer", email: "reviewer@verifilab.local" } }),
+    prisma.user.upsert({ where: { email: "curator@verifilab.local" }, update: { name: "Casey Curator" }, create: { id: "demo-curator", name: "Casey Curator", email: "curator@verifilab.local" } }),
+  ]);
+  const [admin, author, reviewer, curator] = demoUsers;
 
   const stem = await prisma.project.create({
     data: {
       name: "STEM Reasoning Benchmark",
       description: "A curated set of deterministic math and science tasks for evaluator calibration.",
+      memberships: { create: [
+        { userId: admin.id, role: "ADMIN" },
+        { userId: author.id, role: "AUTHOR" },
+        { userId: reviewer.id, role: "REVIEWER" },
+        { userId: curator.id, role: "CURATOR" },
+      ] },
       tasks: {
         create: [
           {
@@ -70,6 +83,13 @@ async function main() {
     prisma.task.findFirstOrThrow({ where: { projectId: stem.id, title: "Structured final answer" } }),
   ]);
 
+  await Promise.all([
+    prisma.task.update({ where: { id: numericTask.id }, data: { assignedAuthorId: author.id, assignedReviewerId: reviewer.id, priority: "HIGH", authorAssignedAt: new Date("2026-07-18T08:00:00Z"), reviewerAssignedAt: new Date("2026-07-19T08:00:00Z"), submittedAt: new Date("2026-07-19T09:00:00Z"), completedAt: new Date("2026-07-19T10:00:00Z") } }),
+    prisma.task.update({ where: { id: exactTask.id }, data: { assignedAuthorId: author.id, assignedReviewerId: reviewer.id, priority: "URGENT", dueDate: new Date("2026-07-22T23:59:59Z"), authorAssignedAt: new Date("2026-07-20T08:00:00Z"), reviewerAssignedAt: new Date("2026-07-20T09:00:00Z"), submittedAt: new Date("2026-07-20T10:00:00Z") } }),
+    prisma.task.update({ where: { id: regexTask.id }, data: { assignedAuthorId: author.id, priority: "MEDIUM", dueDate: new Date("2026-07-20T23:59:59Z"), authorAssignedAt: new Date("2026-07-18T08:00:00Z") } }),
+    prisma.task.update({ where: { id: jsonTask.id }, data: { assignedAuthorId: author.id, priority: "LOW", authorAssignedAt: new Date("2026-07-20T08:00:00Z") } }),
+  ]);
+
   await prisma.verifierVersion.createMany({ data: [numericTask, exactTask, regexTask, jsonTask].map((task) => {
     const snapshot = normalizeVerifierSnapshot(task);
     return {
@@ -118,6 +138,12 @@ async function main() {
     data: {
       name: "Instruction Following",
       description: "Draft workspace for constrained response-format tasks.",
+      memberships: { create: [
+        { userId: admin.id, role: "ADMIN" },
+        { userId: author.id, role: "REVIEWER" },
+        { userId: reviewer.id, role: "AUTHOR" },
+        { userId: curator.id, role: "CURATOR" },
+      ] },
       auditEvents: {
         create: { action: "PROJECT_CREATED", metadata: { source: "seed" } },
       },

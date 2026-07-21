@@ -2,20 +2,23 @@ import Link from "next/link";
 import { ChevronLeft, FileText, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { AuditTimeline } from "@/components/audit-timeline";
+import { ProjectMemberships } from "@/components/project-memberships";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getDemoRole } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const [project, role] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } }, auditEvents: { orderBy: { createdAt: "desc" }, take: 50, include: { task: { select: { id: true, title: true } } } } } }),
-    getDemoRole(),
+  const [project, actor, users] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, include: { tasks: { orderBy: { updatedAt: "desc" } }, memberships: { include: { user: { select: { name: true } } }, orderBy: { user: { name: "asc" } } }, auditEvents: { orderBy: { createdAt: "desc" }, take: 50, include: { task: { select: { id: true, title: true } } } } } }),
+    getProjectActor(projectId),
+    prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!project) notFound();
+  const role = actor?.role ?? "AUTHOR";
 
   return (
     <div className="space-y-7">
@@ -34,6 +37,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
           ))}</tbody></table></div>
         </Card>
       )}
+      {role === "ADMIN" && <Card><CardHeader><h2 className="font-semibold">Project members</h2><p className="mt-1 text-sm text-slate-500">Add users and set their project-scoped role.</p></CardHeader><CardContent><ProjectMemberships projectId={projectId} users={users} memberships={project.memberships.map((membership) => ({ userId: membership.userId, name: membership.user.name, role: membership.role }))} /></CardContent></Card>}
       <Card><CardHeader><h2 className="font-semibold text-slate-950">Project activity</h2><p className="mt-1 text-sm text-slate-500">Latest 50 audit events for this project.</p></CardHeader><CardContent><AuditTimeline events={project.auditEvents.map((event) => ({ ...event, project: { id: project.id, name: project.name } }))} showTask /></CardContent></Card>
     </div>
   );

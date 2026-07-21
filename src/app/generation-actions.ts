@@ -2,7 +2,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { getDemoRole } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/demo-role";
 import { generateTasks, generationFingerprint, generationRequestSchema, selectedGenerationSchema, type GeneratedTask, type GenerationRequest } from "@/lib/generation";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
@@ -11,9 +11,10 @@ export type PreviewTask = GeneratedTask & { duplicate: boolean };
 export type GenerationActionResult = { error?: string; jobId?: string; tasks?: PreviewTask[]; created?: number; duplicates?: string[] };
 
 export async function previewGeneration(input: unknown): Promise<GenerationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot generate tasks." };
   const parsed = generationRequestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const actor = await getProjectActor(parsed.data.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "You cannot generate tasks in this project." };
   const project = await prisma.project.findUnique({ where: { id: parsed.data.projectId }, select: { id: true } });
   if (!project) return { error: "Project not found." };
 
@@ -40,11 +41,12 @@ export async function previewGeneration(input: unknown): Promise<GenerationActio
 }
 
 export async function persistGeneratedTasks(input: unknown): Promise<GenerationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot create tasks." };
   const parsed = selectedGenerationSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const job = await prisma.generationJob.findUnique({ where: { id: parsed.data.jobId } });
   if (!job) return { error: "Generation job not found." };
+  const actor = await getProjectActor(job.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "You cannot create tasks in this project." };
   if (job.status !== "COMPLETED") return { error: "Only completed previews can be saved." };
 
   const request: GenerationRequest = { projectId: job.projectId, generatorType: job.generatorType, count: job.requestedCount, difficulty: job.difficulty, seed: job.seed };
@@ -73,6 +75,7 @@ export async function persistGeneratedTasks(input: unknown): Promise<GenerationA
       generationSeed: task.seed,
       generationBatchId: job.id,
       generationFingerprint: generationFingerprint(task),
+      ...(actor.role === "AUTHOR" ? { assignedAuthorId: actor.id, authorAssignedAt: new Date() } : {}),
       auditEvents: { create: [
         { projectId: job.projectId, action: "TASK_CREATED", metadata: { generationBatchId: job.id, generatorTemplate: job.generatorType } },
         { projectId: job.projectId, action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
@@ -90,9 +93,10 @@ export async function persistGeneratedTasks(input: unknown): Promise<GenerationA
 }
 
 export async function cancelGenerationJob(jobId: string): Promise<GenerationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot cancel generation." };
-  const job = await prisma.generationJob.findUnique({ where: { id: jobId }, select: { id: true, status: true, _count: { select: { tasks: true } } } });
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId }, select: { id: true, projectId: true, status: true, _count: { select: { tasks: true } } } });
   if (!job) return { error: "Generation job not found." };
+  const actor = await getProjectActor(job.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "You cannot cancel generation in this project." };
   if (job._count.tasks > 0) return { error: "A job with saved tasks cannot be cancelled." };
   if (job.status === "FAILED" || job.status === "CANCELLED") return { error: `Job is already ${job.status.toLowerCase()}.` };
   await prisma.generationJob.update({ where: { id: jobId }, data: { status: "CANCELLED", completedAt: new Date() } });
@@ -101,7 +105,6 @@ export async function cancelGenerationJob(jobId: string): Promise<GenerationActi
 }
 
 export async function retryGenerationJob(jobId: string): Promise<GenerationActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot retry generation." };
   const job = await prisma.generationJob.findUnique({ where: { id: jobId }, select: { projectId: true, generatorType: true, requestedCount: true, difficulty: true, seed: true, status: true } });
   if (!job) return { error: "Generation job not found." };
   if (job.status !== "FAILED" && job.status !== "CANCELLED") return { error: "Only failed or cancelled jobs can be retried." };

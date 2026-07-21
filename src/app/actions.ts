@@ -1,14 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { COOKIE_NAME, getDemoRole } from "@/lib/demo-role";
+import { getProjectActor } from "@/lib/demo-role";
 import { isDatasetEligible } from "@/lib/dataset";
 import { prisma } from "@/lib/prisma";
-import { can, reviewTransition, roles, type ReviewAction, type Role } from "@/lib/review";
+import { can, canEditAssignedTask, canReviewAssignedTask, reviewTransition, type ReviewAction } from "@/lib/review";
 import { candidateSchema, projectSchema, reviewCommentSchema, storedVerifierSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
 import { verify, type VerificationResult } from "@/lib/verifier";
 import { normalizeVerifierSnapshot, verifierChanged } from "@/lib/verifier-version";
@@ -55,7 +54,8 @@ export async function createProject(input: ProjectInput): Promise<ActionResult> 
 }
 
 export async function createTask(projectId: string, input: TaskInput): Promise<ActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot create tasks." };
+  const actor = await getProjectActor(projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "You cannot create tasks in this project." };
   const parsed = taskSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
@@ -69,6 +69,7 @@ export async function createTask(projectId: string, input: TaskInput): Promise<A
       data: {
         projectId,
         ...data,
+        ...(actor.role === "AUTHOR" ? { assignedAuthorId: actor.id, authorAssignedAt: new Date() } : {}),
         verifierVersions: { create: { version: 1, verifierType: data.verifierType, verifierConfig: data.verifierConfig, changeSummary: "Initial version" } },
         auditEvents: { create: [
           { projectId, action: "TASK_CREATED", metadata: {} },
@@ -86,15 +87,16 @@ export async function createTask(projectId: string, input: TaskInput): Promise<A
 }
 
 export async function updateTask(taskId: string, projectId: string, input: TaskInput): Promise<ActionResult> {
-  if (!can(await getDemoRole(), "EDIT_TASK")) return { error: "Your demo role cannot edit tasks." };
   const parsed = taskSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, projectId },
-    select: { id: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } },
+    select: { id: true, assignedAuthorId: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } },
   });
   if (!task) return { error: "Task not found." };
+  const actor = await getProjectActor(projectId);
+  if (!actor || !canEditAssignedTask(actor.role, actor.id, task.assignedAuthorId)) return { error: "Only the assigned author, curator or administrator can edit this task." };
   const active = task.verifierVersions[0];
   if (!active) return { error: "Task has no verifier version." };
   const data = toTaskData(parsed.data);
@@ -126,12 +128,13 @@ export async function updateTask(taskId: string, projectId: string, input: TaskI
 }
 
 export async function duplicateTask(taskId: string): Promise<ActionResult> {
-  if (!can(await getDemoRole(), "CREATE_TASK")) return { error: "Your demo role cannot duplicate tasks." };
   const source = await prisma.task.findUnique({
     where: { id: taskId },
     select: { projectId: true, title: true, prompt: true, verifierType: true, verifierConfig: true, difficulty: true, tags: true },
   });
   if (!source) return { error: "Task not found." };
+  const actor = await getProjectActor(source.projectId);
+  if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "You cannot duplicate tasks in this project." };
   let snapshot;
   try {
     snapshot = normalizeVerifierSnapshot(source);
@@ -152,6 +155,7 @@ export async function duplicateTask(taskId: string): Promise<ActionResult> {
         difficulty: source.difficulty,
         status: "DRAFT",
         tags: source.tags as Prisma.InputJsonValue,
+        ...(actor.role === "AUTHOR" ? { assignedAuthorId: actor.id, authorAssignedAt: new Date() } : {}),
         auditEvents: { create: [
           { projectId: source.projectId, action: "TASK_DUPLICATED", metadata: { sourceTaskId: taskId } },
           { projectId: source.projectId, action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
@@ -168,9 +172,10 @@ export async function duplicateTask(taskId: string): Promise<ActionResult> {
 }
 
 export async function deleteTask(taskId: string, projectId: string): Promise<ActionResult> {
-  if (!can(await getDemoRole(), "DELETE_TASK")) return { error: "Your demo role cannot delete tasks." };
-  const task = await prisma.task.findFirst({ where: { id: taskId, projectId }, select: { id: true } });
+  const task = await prisma.task.findFirst({ where: { id: taskId, projectId }, select: { id: true, assignedAuthorId: true } });
   if (!task) return { error: "Task not found." };
+  const actor = await getProjectActor(projectId);
+  if (!actor || !can(actor.role, "DELETE_TASK") || !canEditAssignedTask(actor.role, actor.id, task.assignedAuthorId)) return { error: "You cannot delete this task." };
 
   try {
     await prisma.task.delete({ where: { id: taskId } });
@@ -187,10 +192,9 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
   if (!parsed.success) return { succeeded: [], failures: [], error: parsed.error.issues[0].message };
 
   const { operation, taskIds } = parsed.data;
-  const role = await getDemoRole();
   const tasks = await prisma.task.findMany({
     where: { id: { in: taskIds } },
-    select: { id: true, projectId: true, title: true, status: true, tags: true },
+    select: { id: true, projectId: true, title: true, status: true, tags: true, assignedAuthorId: true },
   });
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const result: BulkTaskResult = { succeeded: [], failures: [] };
@@ -208,18 +212,25 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
       result.failures.push({ taskId, title: taskId, error: "Task not found." });
       continue;
     }
+    const actor = await getProjectActor(task.projectId);
+    if (!actor) {
+      result.failures.push({ taskId: task.id, title: task.title, error: "You are not a member of this project." });
+      continue;
+    }
+    const role = actor.role;
 
     let error: string | undefined;
     try {
       if (operation === "SUBMIT") {
-        const transition = reviewTransition(task.status, "SUBMIT", role);
-        if (!transition.ok) error = transition.error;
-        else await prisma.$transaction([
-          prisma.task.update({ where: { id: task.id }, data: { status: transition.nextStatus } }),
-          prisma.auditEvent.create({ data: { projectId: task.projectId, taskId: task.id, action: "TASK_SUBMIT", metadata: { from: task.status, to: transition.nextStatus, role } } }),
+        if (!canEditAssignedTask(role, actor.id, task.assignedAuthorId)) error = "Only the assigned author, curator or administrator may submit this task.";
+        const transition = error ? null : reviewTransition(task.status, "SUBMIT", role);
+        if (transition && !transition.ok) error = transition.error;
+        else if (transition) await prisma.$transaction([
+          prisma.task.update({ where: { id: task.id }, data: { status: transition.nextStatus, submittedAt: new Date() } }),
+          prisma.auditEvent.create({ data: { projectId: task.projectId, taskId: task.id, action: "TASK_SUBMITTED_FOR_REVIEW", metadata: { from: task.status, to: transition.nextStatus, role, actorId: actor.id } } }),
         ]);
       } else if (operation === "ADD_TAGS") {
-        if (!can(role, "EDIT_TASK")) error = `${role} does not have permission to add tags to this task.`;
+        if (!can(role, "EDIT_TASK") || !canEditAssignedTask(role, actor.id, task.assignedAuthorId)) error = `${role} does not have permission to add tags to this task.`;
         else {
           const tags = [...new Set([...jsonTags(task.tags), ...parsed.data.tags])];
           if (tags.join(", ").length > 300) error = "Combined tags cannot exceed 300 characters.";
@@ -229,7 +240,7 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
           ]);
         }
       } else if (operation === "DELETE_DRAFTS") {
-        if (!can(role, "DELETE_TASK")) error = `${role} does not have permission to delete this task.`;
+        if (!can(role, "DELETE_TASK") || !canEditAssignedTask(role, actor.id, task.assignedAuthorId)) error = `${role} does not have permission to delete this task.`;
         else if (task.status !== "DRAFT") error = "Only draft tasks can be bulk deleted.";
         else await prisma.task.delete({ where: { id: task.id } });
       } else if (!isDatasetEligible(task, dataset!.projectId)) {
@@ -300,12 +311,13 @@ export async function runVerification(taskId: string, candidate: string): Promis
 }
 
 export async function restoreVerifierVersion(taskId: string, projectId: string, verifierVersionId: string): Promise<ActionResult> {
-  if (!can(await getDemoRole(), "EDIT_TASK")) return { error: "Your demo role cannot restore verifier versions." };
   const [source, active] = await Promise.all([
-    prisma.verifierVersion.findFirst({ where: { id: verifierVersionId, taskId, task: { projectId } } }),
+    prisma.verifierVersion.findFirst({ where: { id: verifierVersionId, taskId, task: { projectId } }, include: { task: { select: { assignedAuthorId: true } } } }),
     prisma.verifierVersion.findFirst({ where: { taskId, task: { projectId } }, orderBy: { version: "desc" } }),
   ]);
   if (!source || !active) return { error: "Verifier version not found." };
+  const actor = await getProjectActor(projectId);
+  if (!actor || !canEditAssignedTask(actor.role, actor.id, source.task?.assignedAuthorId ?? null)) return { error: "You cannot restore verifier versions for this task." };
   if (source.version >= active.version) return { error: "Only a historical verifier version can be restored." };
 
   let snapshot;
@@ -331,29 +343,31 @@ export async function restoreVerifierVersion(taskId: string, projectId: string, 
   return {};
 }
 
-export async function setDemoRole(value: Role): Promise<ActionResult> {
-  const parsed = z.enum(roles).safeParse(value);
-  if (!parsed.success) return { error: "Invalid demo role." };
-  (await cookies()).set(COOKIE_NAME, parsed.data, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
-  revalidatePath("/dashboard", "layout");
-  return {};
-}
-
 export async function changeTaskStatus(taskId: string, action: ReviewAction, comment = ""): Promise<ActionResult> {
-  const parsedAction = z.enum(["SUBMIT", "APPROVE", "REJECT", "REOPEN"]).safeParse(action);
+  const parsedAction = z.enum(["START", "SUBMIT", "REQUEST_CHANGES", "APPROVE", "REJECT"]).safeParse(action);
   if (!parsedAction.success) return { error: "Invalid review action." };
-  const role = await getDemoRole();
-  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, status: true } });
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, status: true, assignedAuthorId: true, assignedReviewerId: true } });
   if (!task) return { error: "Task not found." };
-  const transition = reviewTransition(task.status, parsedAction.data, role, comment);
+  const actor = await getProjectActor(task.projectId);
+  if (!actor) return { error: "You are not a member of this project." };
+  const reviewing = ["REQUEST_CHANGES", "APPROVE", "REJECT"].includes(parsedAction.data);
+  if (reviewing && !canReviewAssignedTask(actor.role, actor.id, task.assignedAuthorId, task.assignedReviewerId)) return { error: "Only the assigned reviewer, curator or administrator may review this task, and authors cannot review their own work." };
+  if (!reviewing && !canEditAssignedTask(actor.role, actor.id, task.assignedAuthorId)) return { error: "Only the assigned author, curator or administrator may move this task forward." };
+  const transition = reviewTransition(task.status, parsedAction.data, actor.role, comment);
   if (!transition.ok) return { error: transition.error };
+  const now = new Date();
+  const actionName = { START: "TASK_WORK_STARTED", SUBMIT: "TASK_SUBMITTED_FOR_REVIEW", REQUEST_CHANGES: "TASK_CHANGES_REQUESTED", APPROVE: "TASK_APPROVED", REJECT: "TASK_REJECTED" }[parsedAction.data];
 
   try {
     await prisma.$transaction([
-      prisma.task.update({ where: { id: taskId }, data: { status: transition.nextStatus } }),
-      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: `TASK_${parsedAction.data}`, metadata: { from: task.status, to: transition.nextStatus, role } } }),
+      prisma.task.update({ where: { id: taskId }, data: {
+        status: transition.nextStatus,
+        ...(transition.nextStatus === "IN_REVIEW" ? { submittedAt: now } : {}),
+        ...(["APPROVED", "REJECTED"].includes(transition.nextStatus) ? { completedAt: now } : {}),
+      } }),
+      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: actionName, metadata: { from: task.status, to: transition.nextStatus, role: actor.role, actorId: actor.id } } }),
       ...(transition.comment
-        ? [prisma.reviewComment.create({ data: { taskId, author: roleLabel(role), body: transition.comment } })]
+        ? [prisma.reviewComment.create({ data: { taskId, author: actor.name, body: transition.comment } })]
         : []),
     ]);
   } catch {
@@ -362,31 +376,28 @@ export async function changeTaskStatus(taskId: string, action: ReviewAction, com
 
   revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${taskId}`);
   revalidatePath("/dashboard/review");
+  revalidatePath("/dashboard/my-work");
   revalidatePath(`/dashboard/projects/${task.projectId}`);
   revalidatePath("/dashboard/activity");
   return {};
 }
 
 export async function addReviewComment(taskId: string, comment: string): Promise<ActionResult> {
-  const role = await getDemoRole();
-  if (!can(role, "COMMENT")) return { error: "Your demo role cannot add review comments." };
   const parsed = reviewCommentSchema.safeParse(comment);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true } });
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, status: true, assignedAuthorId: true, assignedReviewerId: true } });
   if (!task) return { error: "Task not found." };
+  const actor = await getProjectActor(task.projectId);
+  if (!actor || !can(actor.role, "COMMENT") || !canReviewAssignedTask(actor.role, actor.id, task.assignedAuthorId, task.assignedReviewerId)) return { error: "Only the assigned reviewer, curator or administrator may comment on this review." };
 
   try {
-    await prisma.reviewComment.create({ data: { taskId, author: roleLabel(role), body: parsed.data } });
+    await prisma.reviewComment.create({ data: { taskId, author: actor.name, body: parsed.data } });
   } catch {
     return { error: "Could not save the comment. Please try again." };
   }
 
   revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${taskId}`);
   return {};
-}
-
-function roleLabel(role: Role) {
-  return `${role[0]}${role.slice(1).toLowerCase()} (demo)`;
 }
 
 function splitTags(value: string) {

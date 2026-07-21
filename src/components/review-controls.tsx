@@ -6,15 +6,16 @@ import { addReviewComment, changeTaskStatus } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { can, type ReviewAction, type Role, type TaskStatus } from "@/lib/review";
+import { can, canEditAssignedTask, canReviewAssignedTask, type ReviewAction, type Role, type TaskStatus } from "@/lib/review";
 
-export function ReviewControls({ taskId, status, role }: { taskId: string; status: TaskStatus; role: Role }) {
+export function ReviewControls({ taskId, status, role, userId, assignedAuthorId, assignedReviewerId }: { taskId: string; status: TaskStatus; role: Role; userId: string; assignedAuthorId: string | null; assignedReviewerId: string | null }) {
   const router = useRouter();
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  const mayComment = can(role, "COMMENT");
-  const actions = actionsFor(status, role);
+  const mayReview = canReviewAssignedTask(role, userId, assignedAuthorId, assignedReviewerId);
+  const mayComment = can(role, "COMMENT") && mayReview;
+  const actions = actionsFor(status, role, canEditAssignedTask(role, userId, assignedAuthorId), mayReview);
 
   const changeStatus = (action: ReviewAction) => startTransition(async () => {
     setError("");
@@ -43,13 +44,14 @@ export function ReviewControls({ taskId, status, role }: { taskId: string; statu
   );
 }
 
-function actionsFor(status: TaskStatus, role: Role): { action: ReviewAction; label: string; variant: "default" | "secondary" | "destructive" }[] {
-  if (status === "DRAFT" && can(role, "SUBMIT_TASK")) return [{ action: "SUBMIT", label: "Submit for review", variant: "default" }];
-  if (status === "IN_REVIEW") return [
-    ...(can(role, "APPROVE_TASK") ? [{ action: "APPROVE" as const, label: "Approve", variant: "default" as const }] : []),
-    ...(can(role, "REJECT_TASK") ? [{ action: "REJECT" as const, label: "Reject", variant: "destructive" as const }] : []),
+function actionsFor(status: TaskStatus, role: Role, mayEdit: boolean, mayReview: boolean): { action: ReviewAction; label: string; variant: "default" | "secondary" | "destructive" }[] {
+  if (status === "DRAFT" && mayEdit) return [{ action: "START", label: "Start work", variant: "default" }];
+  if (status === "CHANGES_REQUESTED" && mayEdit) return [{ action: "START", label: "Resume work", variant: "default" }];
+  if (status === "IN_PROGRESS" && mayEdit && can(role, "SUBMIT_TASK")) return [{ action: "SUBMIT", label: "Submit for review", variant: "default" }];
+  if (status === "IN_REVIEW" && mayReview) return [
+    { action: "APPROVE", label: "Approve", variant: "default" },
+    { action: "REQUEST_CHANGES", label: "Request changes", variant: "secondary" },
+    { action: "REJECT", label: "Reject", variant: "destructive" },
   ];
-  if (status === "REJECTED" && can(role, "REOPEN_REJECTED")) return [{ action: "REOPEN", label: "Reopen as draft", variant: "secondary" }];
-  if (status === "APPROVED" && can(role, "REOPEN_APPROVED")) return [{ action: "REOPEN", label: "Reopen as draft", variant: "secondary" }];
   return [];
 }

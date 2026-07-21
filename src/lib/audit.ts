@@ -9,11 +9,20 @@ const labels: Record<string, string> = {
   TASK_SUBMIT: "Review submitted",
   TASK_APPROVE: "Task approved",
   TASK_REJECT: "Task rejected",
+  PROJECT_ROLE_CHANGED: "Project role changed",
+  TASK_AUTHOR_ASSIGNED: "Author assigned",
+  TASK_REVIEWER_ASSIGNED: "Reviewer assigned",
+  TASK_WORK_STARTED: "Task work started",
+  TASK_SUBMITTED_FOR_REVIEW: "Task submitted for review",
+  TASK_CHANGES_REQUESTED: "Changes requested",
+  TASK_APPROVED: "Task approved",
+  TASK_REJECTED: "Task rejected",
   DATASET_CREATED: "Dataset created",
   TASK_ADDED_TO_DATASET: "Task added to dataset",
   DATASET_EXPORTED: "Dataset exported",
   DATASET_QUALITY_SCANNED: "Dataset quality scanned",
   DATASET_RELEASE_CREATED: "Dataset release created",
+  TASK_ADDED_TO_RELEASE: "Task added to release",
   DATASET_RELEASE_EXPORTED: "Dataset release exported",
   EVALUATION_BATCH_CREATED: "Evaluation batch created",
   EVALUATION_RESPONSES_IMPORTED: "Evaluation responses imported",
@@ -45,7 +54,7 @@ export function auditDetail(action: string, value: unknown) {
   if (action === "EVALUATION_RESULTS_RERUN") return `${number(metadata.affected)} results · ${string(metadata.mode).toLowerCase()}`;
   if (action === "EVALUATION_EXPORTED") return `${number(metadata.resultCount)} results · ${string(metadata.format).toUpperCase()}`;
   if (action === "EVALUATION_BATCH_DELETED") return `${string(metadata.batchName)} · ${number(metadata.resultCount)} results`;
-  if (["TASK_SUBMIT", "TASK_APPROVE", "TASK_REJECT"].includes(action) && metadata.role) return `${string(metadata.from)} → ${string(metadata.to)} · ${string(metadata.role).toLowerCase()}`;
+  if (["TASK_SUBMIT", "TASK_APPROVE", "TASK_REJECT", "TASK_WORK_STARTED", "TASK_SUBMITTED_FOR_REVIEW", "TASK_CHANGES_REQUESTED", "TASK_APPROVED", "TASK_REJECTED"].includes(action) && metadata.role) return `${string(metadata.from)} → ${string(metadata.to)} · ${string(metadata.role).toLowerCase()}`;
   return "";
 }
 

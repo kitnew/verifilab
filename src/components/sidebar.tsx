@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Activity, ClipboardCheck, Database, FileSearch, FlaskConical, FolderKanban, LayoutDashboard, Sparkles, TestTube2, Upload } from "lucide-react";
-import { setDemoRole } from "@/app/actions";
-import type { Role } from "@/lib/review";
+import { Activity, ClipboardCheck, Database, FileSearch, FlaskConical, FolderKanban, LayoutDashboard, ListTodo, Sparkles, TestTube2, Upload } from "lucide-react";
+import { setDemoUser } from "@/app/workflow-actions";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard", label: "Projects", icon: FolderKanban },
   { href: "/dashboard/tasks", label: "Tasks", icon: FileSearch },
+  { href: "/dashboard/my-work", label: "My Work", icon: ListTodo },
   { href: "/dashboard/imports", label: "Bulk import", icon: Upload },
   { href: "/dashboard/generation", label: "Generate", icon: Sparkles },
   { href: "/dashboard/evaluations", label: "Evaluations", icon: FlaskConical },
@@ -20,7 +20,7 @@ const links = [
   { href: "/dashboard/activity", label: "Activity", icon: Activity },
 ];
 
-export function Sidebar({ role }: { role: Role }) {
+export function Sidebar({ userId, users }: { userId: string; users: { id: string; name: string; label: string }[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const [error, setError] = useState("");
@@ -39,22 +39,20 @@ export function Sidebar({ role }: { role: Role }) {
         })}
       </nav>
       <div className="mt-auto border-t border-white/10 p-4">
-        <label htmlFor="demo-role" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Demo role</label>
+        <label htmlFor="demo-user" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Demo user</label>
         <select
-          id="demo-role"
-          value={role}
+          id="demo-user"
+          value={userId}
           disabled={pending}
           onChange={(event) => startTransition(async () => {
             setError("");
-            const result = await setDemoRole(event.target.value as Role);
+            const result = await setDemoUser(event.target.value);
             if (result.error) return setError(result.error);
             router.refresh();
           })}
           className="h-9 w-full rounded-lg border border-white/15 bg-white/10 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-400"
         >
-          <option className="text-slate-950" value="AUTHOR">Author</option>
-          <option className="text-slate-950" value="REVIEWER">Reviewer</option>
-          <option className="text-slate-950" value="ADMIN">Admin</option>
+          {users.map((user) => <option className="text-slate-950" key={user.id} value={user.id}>{user.name} · {user.label.toLowerCase()}</option>)}
         </select>
         {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
         <p className="mt-3 text-xs leading-5 text-slate-400">Demo only · No authentication</p>

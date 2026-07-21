@@ -7,7 +7,9 @@ import { z } from "zod";
 import { datasetExportItems, datasetSchema, datasetTaskIdsSchema, datasetUpdateSchema, isDatasetEligible, type DatasetInput } from "@/lib/dataset";
 import { analyzeDatasetQuality } from "@/lib/dataset-quality";
 import { createDatasetReleaseItems, datasetReleaseSchema, releaseSplitCounts, releaseVersionIsUnique } from "@/lib/dataset-release";
+import { getProjectActor } from "@/lib/demo-role";
 import { prisma } from "@/lib/prisma";
+import { can } from "@/lib/review";
 
 export type DatasetActionResult = { error?: string; releaseId?: string };
 
@@ -188,7 +190,10 @@ export async function createDatasetRelease(datasetId: string, input: unknown): P
     },
   });
   if (!dataset) return { error: "Dataset not found." };
+  const actor = await getProjectActor(dataset.projectId);
+  if (!actor || !can(actor.role, "CREATE_RELEASE")) return { error: "Only a curator or administrator can create dataset releases." };
   if (!dataset.items.length) return { error: "An empty dataset cannot produce a release." };
+  if (dataset.items.some((item) => item.task.status !== "APPROVED")) return { error: "Only approved tasks may be included in a dataset release." };
   if (!releaseVersionIsUnique(dataset.releases.map((release) => release.version), parsed.data.version)) return { error: `Release ${parsed.data.version} already exists in this dataset.` };
   const snapshot = datasetExportItems(dataset.items);
   const released = createDatasetReleaseItems(snapshot, parsed.data, parsed.data.seed);
@@ -210,6 +215,7 @@ export async function createDatasetRelease(datasetId: string, input: unknown): P
         items: released as Prisma.InputJsonArray,
       } });
       await transaction.auditEvent.create({ data: { projectId: dataset.projectId, action: "DATASET_RELEASE_CREATED", metadata: { datasetId: dataset.id, releaseId: created.id, version: created.version, taskCount: created.totalCount } } });
+      await Promise.all(dataset.items.map((item) => transaction.auditEvent.create({ data: { projectId: dataset.projectId, taskId: item.task.id, action: "TASK_ADDED_TO_RELEASE", metadata: { datasetId: dataset.id, releaseId: created.id, version: created.version, actorId: actor.id } } })));
       return created;
     });
     revalidatePath(`/dashboard/datasets/${dataset.id}`);
