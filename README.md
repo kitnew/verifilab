@@ -58,4 +58,3 @@ One Next.js 16 App Router process owns the React UI, route handlers, server acti
 - Rerunning the demo seed resets the seeded admin password to `BOOTSTRAP_ADMIN_PASSWORD` and replaces project demo data.
 - No external queue, object store, HA database, or distributed locking is implemented.
 - Playwright installs its browser separately and is not part of the fast `quality` command.
-- The screenshot is intentionally a placeholder until a stable branded capture is available.
