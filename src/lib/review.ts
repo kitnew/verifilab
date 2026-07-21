@@ -1,4 +1,4 @@
-export const roles = ["AUTHOR", "REVIEWER", "CURATOR", "ADMIN"] as const;
+export const roles = ["AUTHOR", "REVIEWER", "CURATOR", "OPERATOR", "ADMIN"] as const;
 export type Role = (typeof roles)[number];
 export type TaskStatus = "DRAFT" | "IN_PROGRESS" | "IN_REVIEW" | "CHANGES_REQUESTED" | "APPROVED" | "REJECTED";
 export type ReviewAction = "START" | "SUBMIT" | "REQUEST_CHANGES" | "APPROVE" | "REJECT";
@@ -8,6 +8,7 @@ const permissions: Record<Role, Permission[]> = {
   AUTHOR: ["CREATE_TASK", "EDIT_TASK", "DELETE_TASK", "SUBMIT_TASK"],
   REVIEWER: ["REVIEW_TASK", "COMMENT"],
   CURATOR: ["CREATE_TASK", "EDIT_TASK", "DELETE_TASK", "SUBMIT_TASK", "REVIEW_TASK", "COMMENT", "ASSIGN_TASK", "CREATE_RELEASE"],
+  OPERATOR: [],
   ADMIN: ["CREATE_TASK", "EDIT_TASK", "DELETE_TASK", "SUBMIT_TASK", "REVIEW_TASK", "COMMENT", "ASSIGN_TASK", "CREATE_RELEASE", "MANAGE_MEMBERS"],
 };
 

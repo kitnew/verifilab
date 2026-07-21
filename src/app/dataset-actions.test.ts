@@ -5,11 +5,16 @@ const mocks = vi.hoisted(() => ({
   findDataset: vi.fn(),
   transaction: vi.fn(),
   revalidatePath: vi.fn(),
+  createAsyncJob: vi.fn(),
+  executeAsyncJob: vi.fn(),
+  after: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
+vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getProjectActor: mocks.getProjectActor }));
+vi.mock("@/lib/async-job-service", () => ({ createAsyncJob: mocks.createAsyncJob, executeAsyncJob: mocks.executeAsyncJob }));
 vi.mock("@/lib/prisma", () => ({ prisma: { dataset: { findUnique: mocks.findDataset }, $transaction: mocks.transaction } }));
 
 import { createDatasetRelease } from "./dataset-actions";
@@ -20,6 +25,7 @@ describe("dataset release permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.findDataset.mockResolvedValue({ id: "dataset", projectId: "project", items: [{ task: { id: "task", status: "APPROVED", project: { id: "project", name: "P", description: "" } } }], releases: [] });
+    mocks.createAsyncJob.mockResolvedValue({ id: "async-1", duplicate: false });
   });
 
   it("denies authors server-side", async () => {

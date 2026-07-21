@@ -39,6 +39,9 @@ describe("project-scoped permissions", () => {
     expect(can("CURATOR", "ASSIGN_TASK")).toBe(true);
     expect(can("CURATOR", "CREATE_RELEASE")).toBe(true);
     expect(can("ADMIN", "MANAGE_MEMBERS")).toBe(true);
+    expect(can("OPERATOR", "EDIT_TASK")).toBe(false);
+    expect(can("OPERATOR", "REVIEW_TASK")).toBe(false);
+    expect(can("OPERATOR", "CREATE_RELEASE")).toBe(false);
   });
 
   it("limits authors and reviewers to their assignment and prevents self-review", () => {

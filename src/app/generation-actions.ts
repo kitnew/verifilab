@@ -2,8 +2,10 @@
 
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getProjectActor } from "@/lib/auth";
 import { generateTasks, generationFingerprint, generationRequestSchema, selectedGenerationSchema, type GeneratedTask, type GenerationRequest } from "@/lib/generation";
+import { createAsyncJob, executeAsyncJob } from "@/lib/async-job-service";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
@@ -18,25 +20,12 @@ export async function previewGeneration(input: unknown): Promise<GenerationActio
   const project = await prisma.project.findUnique({ where: { id: parsed.data.projectId }, select: { id: true } });
   if (!project) return { error: "Project not found." };
 
-  let job: { id: string };
   try {
-    job = await prisma.generationJob.create({ data: { projectId: parsed.data.projectId, requestedCount: parsed.data.count, seed: parsed.data.seed, generatorType: parsed.data.generatorType, generatorVersion: 1, difficulty: parsed.data.difficulty } });
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: "RUNNING", progress: 1 } });
+    const job = await createAsyncJob({ projectId: parsed.data.projectId, initiatorId: actor.id, type: "BATCH_TASK_GENERATION", payload: parsed.data, inputSummary: `${parsed.data.count} ${parsed.data.generatorType.toLowerCase().replaceAll("_", " ")} tasks` });
+    if (!job.duplicate) after(() => executeAsyncJob(job.id));
+    return { jobId: job.id };
   } catch {
     return { error: "Could not start generation." };
-  }
-
-  try {
-    const tasks = generateTasks(parsed.data, job.id);
-    const fingerprints = tasks.map(generationFingerprint);
-    const duplicates = new Set((await prisma.task.findMany({ where: { projectId: parsed.data.projectId, generationFingerprint: { in: fingerprints } }, select: { generationFingerprint: true } })).map((task) => task.generationFingerprint));
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: "COMPLETED", generatedCount: tasks.length, progress: 100, completedAt: new Date() } });
-    revalidatePath("/dashboard/generation/history");
-    return { jobId: job.id, tasks: tasks.map((task) => ({ ...task, duplicate: duplicates.has(generationFingerprint(task)) })) };
-  } catch (error) {
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: "FAILED", errorMessage: message(error), completedAt: new Date() } }).catch(() => undefined);
-    revalidatePath("/dashboard/generation/history");
-    return { error: "Generation failed. Retry from generation history." };
   }
 }
 
@@ -109,8 +98,4 @@ export async function retryGenerationJob(jobId: string): Promise<GenerationActio
   if (!job) return { error: "Generation job not found." };
   if (job.status !== "FAILED" && job.status !== "CANCELLED") return { error: "Only failed or cancelled jobs can be retried." };
   return previewGeneration({ projectId: job.projectId, generatorType: job.generatorType, count: job.requestedCount, difficulty: job.difficulty, seed: job.seed });
-}
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message.slice(0, 500) : "Unknown generation error.";
 }

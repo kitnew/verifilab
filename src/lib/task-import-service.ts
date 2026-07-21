@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { parseTaskImport, planTaskImport, type ColumnMapping, type DuplicateStrategy, type TaskImportFormat } from "@/lib/task-import";
 
-export class TaskImportError extends Error {}
+export class TaskImportError extends Error { name = "TaskImportError"; }
 
 const snapshotSchema = z.object({
   title: z.string(),

@@ -11,10 +11,15 @@ const mocks = vi.hoisted(() => ({
   taskCreate: vi.fn(),
   transaction: vi.fn(),
   revalidatePath: vi.fn(),
+  createAsyncJob: vi.fn(),
+  executeAsyncJob: vi.fn(),
+  after: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
+vi.mock("next/server", () => ({ after: mocks.after }));
 vi.mock("@/lib/auth", () => ({ getProjectActor: mocks.getProjectActor }));
+vi.mock("@/lib/async-job-service", () => ({ createAsyncJob: mocks.createAsyncJob, executeAsyncJob: mocks.executeAsyncJob }));
 vi.mock("@/lib/prisma", () => ({ prisma: {
   project: { findUnique: mocks.projectFindUnique },
   generationJob: { create: mocks.jobCreate, findUnique: mocks.jobFindUnique, update: mocks.jobUpdate },
@@ -34,6 +39,7 @@ describe("generation actions", () => {
     mocks.jobUpdate.mockResolvedValue({});
     mocks.taskFindMany.mockResolvedValue([]);
     mocks.transaction.mockResolvedValue([]);
+    mocks.createAsyncJob.mockResolvedValue({ id: "async-1", duplicate: false });
   });
 
   it("validates the maximum batch size before database access", async () => {
@@ -41,14 +47,10 @@ describe("generation actions", () => {
     expect(mocks.projectFindUnique).not.toHaveBeenCalled();
   });
 
-  it("marks project duplicates in the preview", async () => {
-    const generated = generateTasks(request, "job-1");
-    mocks.taskFindMany.mockResolvedValue([{ generationFingerprint: generationFingerprint(generated[0]) }]);
-
-    const result = await previewGeneration(request);
-
-    expect(result.tasks?.map((task) => task.duplicate)).toEqual([true, false]);
-    expect(mocks.jobUpdate).toHaveBeenLastCalledWith({ where: { id: "job-1" }, data: expect.objectContaining({ status: "COMPLETED", generatedCount: 2, progress: 100 }) });
+  it("queues a persistent generation job and returns immediately", async () => {
+    expect(await previewGeneration(request)).toEqual({ jobId: "async-1" });
+    expect(mocks.createAsyncJob).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-1", initiatorId: "admin", type: "BATCH_TASK_GENERATION" }));
+    expect(mocks.after).toHaveBeenCalledOnce();
   });
 
   it("rechecks duplicates when persisting selected drafts", async () => {
@@ -72,7 +74,6 @@ describe("generation actions", () => {
   it("retries a cancelled job with the same inputs", async () => {
     mocks.jobFindUnique.mockResolvedValue({ ...request, requestedCount: 2, status: "CANCELLED" });
     const result = await retryGenerationJob("old-job");
-    expect(result.jobId).toBe("job-1");
-    expect(result.tasks).toHaveLength(2);
+    expect(result.jobId).toBe("async-1");
   });
 });

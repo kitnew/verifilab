@@ -34,7 +34,7 @@ export async function createGuestSession() {
       memberships: { create: roles.map((role, index) => ({ role, userId: users[index].id })) },
       auditEvents: { create: { action: "PROJECT_CREATED", metadata: { source: "guest" } } },
     } });
-    await transaction.session.create({ data: { userId: users[3].id, tokenHash: tokenHash(token), expiresAt } });
+    await transaction.session.create({ data: { userId: users[roles.indexOf("ADMIN")].id, tokenHash: tokenHash(token), expiresAt } });
   });
   await setSessionCookie(token, expiresAt);
 }

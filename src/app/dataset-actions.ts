@@ -1,17 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { datasetExportItems, datasetSchema, datasetTaskIdsSchema, datasetUpdateSchema, isDatasetEligible, type DatasetInput } from "@/lib/dataset";
 import { analyzeDatasetQuality } from "@/lib/dataset-quality";
-import { createDatasetReleaseItems, datasetReleaseSchema, releaseSplitCounts, releaseVersionIsUnique } from "@/lib/dataset-release";
+import { datasetReleaseSchema } from "@/lib/dataset-release";
+import { createAsyncJob, executeAsyncJob } from "@/lib/async-job-service";
 import { getProjectActor } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
-export type DatasetActionResult = { error?: string; releaseId?: string };
+export type DatasetActionResult = { error?: string; releaseId?: string; jobId?: string };
 
 export async function createDataset(input: DatasetInput): Promise<DatasetActionResult> {
   const parsed = datasetSchema.safeParse(input);
@@ -195,50 +197,18 @@ export async function runDatasetQualityScan(datasetId: string): Promise<DatasetA
 export async function createDatasetRelease(datasetId: string, input: unknown): Promise<DatasetActionResult> {
   const parsed = datasetReleaseSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const dataset = await prisma.dataset.findUnique({
-    where: { id: datasetId },
-    include: {
-      items: {
-        orderBy: { position: "asc" },
-        include: { task: { include: { project: { select: { id: true, name: true, description: true } } } } },
-      },
-      releases: { where: { version: parsed.data.version }, select: { version: true } },
-    },
-  });
+  const dataset = await prisma.dataset.findUnique({ where: { id: datasetId }, select: { id: true, projectId: true, items: { select: { task: { select: { status: true } } } }, releases: { where: { version: parsed.data.version }, select: { id: true } } } });
   if (!dataset) return { error: "Dataset not found." };
   const actor = await getProjectActor(dataset.projectId);
   if (!actor || !can(actor.role, "CREATE_RELEASE")) return { error: "Only a curator or administrator can create dataset releases." };
   if (!dataset.items.length) return { error: "An empty dataset cannot produce a release." };
   if (dataset.items.some((item) => item.task.status !== "APPROVED")) return { error: "Only approved tasks may be included in a dataset release." };
-  if (!releaseVersionIsUnique(dataset.releases.map((release) => release.version), parsed.data.version)) return { error: `Release ${parsed.data.version} already exists in this dataset.` };
-  const snapshot = datasetExportItems(dataset.items);
-  const released = createDatasetReleaseItems(snapshot, parsed.data, parsed.data.seed);
-  const counts = releaseSplitCounts(released.length, parsed.data);
+  if (dataset.releases.length) return { error: `Release ${parsed.data.version} already exists in this dataset.` };
   try {
-    const release = await prisma.$transaction(async (transaction) => {
-      const created = await transaction.datasetRelease.create({ data: {
-        datasetId: dataset.id,
-        version: parsed.data.version,
-        notes: parsed.data.notes,
-        seed: parsed.data.seed,
-        trainPercentage: parsed.data.trainPercentage,
-        validationPercentage: parsed.data.validationPercentage,
-        testPercentage: parsed.data.testPercentage,
-        totalCount: released.length,
-        trainCount: counts.train,
-        validationCount: counts.validation,
-        testCount: counts.test,
-        items: released as Prisma.InputJsonArray,
-      } });
-      await transaction.auditEvent.create({ data: { projectId: dataset.projectId, action: "DATASET_RELEASE_CREATED", metadata: { datasetId: dataset.id, releaseId: created.id, version: created.version, taskCount: created.totalCount } } });
-      await Promise.all(dataset.items.map((item) => transaction.auditEvent.create({ data: { projectId: dataset.projectId, taskId: item.task.id, action: "TASK_ADDED_TO_RELEASE", metadata: { datasetId: dataset.id, releaseId: created.id, version: created.version, actorId: actor.id } } })));
-      return created;
-    });
-    revalidatePath(`/dashboard/datasets/${dataset.id}`);
-    revalidatePath("/dashboard/activity");
-    return { releaseId: release.id };
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { error: `Release ${parsed.data.version} already exists in this dataset.` };
-    return { error: "Could not create the dataset release. Please try again." };
+    const job = await createAsyncJob({ projectId: dataset.projectId, initiatorId: actor.id, type: "DATASET_RELEASE", payload: { datasetId, data: parsed.data }, inputSummary: `Dataset release ${parsed.data.version}` });
+    if (!job.duplicate) after(() => executeAsyncJob(job.id));
+    return { jobId: job.id };
+  } catch {
+    return { error: "Could not start the dataset release job. Please try again." };
   }
 }

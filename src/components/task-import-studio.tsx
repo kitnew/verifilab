@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { CanonicalTaskImportField, ColumnMapping, DuplicateStrategy, TaskImportPreview } from "@/lib/task-import";
 
 type Project = { id: string; name: string };
-type Result = { importId: string; total: number; imported: number; replaced: number; skipped: number; duplicate: number; failed: number };
+type Result = { jobId: string };
 const fieldHelp: Record<CanonicalTaskImportField, string> = {
   title: "Task title",
   prompt: "Prompt shown to the model",
@@ -100,7 +100,7 @@ export function TaskImportStudio({ projects, maxBytes, maxRows, fields }: { proj
       <Button disabled={preview.validRows === 0 || Boolean(pending)} onClick={() => submit("confirm")}>{pending === "confirm" ? "Importing…" : "5. Import valid rows"}</Button>
     </CardContent></Card>}
 
-    {result && <Card className="border-emerald-200"><CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><CheckCircle2 className="mt-0.5 size-5 text-emerald-600" /><div><h2 className="font-semibold text-slate-950">Import completed</h2><p className="mt-1 text-sm text-slate-600">{result.imported} imported · {result.replaced} replaced · {result.skipped} skipped · {result.failed} rejected</p></div></div><div className="flex flex-wrap gap-2">{result.failed > 0 && <a href={"/api/task-imports/" + result.importId + "/rejected"} className={buttonVariants({ variant: "secondary" })}>Download rejected rows</a>}<Link href={"/dashboard/imports/" + result.importId} className={buttonVariants({ variant: "secondary" })}>View summary</Link></div></CardContent></Card>}
+    {result && <Card className="border-emerald-200"><CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><CheckCircle2 className="mt-0.5 size-5 text-emerald-600" /><div><h2 className="font-semibold text-slate-950">Import queued</h2><p className="mt-1 text-sm text-slate-600">Follow validation and import progress in Job Center.</p></div></div><Link href={"/dashboard/jobs/" + result.jobId} className={buttonVariants({ variant: "secondary" })}>View job</Link></CardContent></Card>}
   </div>;
 }
 
@@ -110,4 +110,4 @@ function Strategy({ value, selected, set, label, detail }: { value: DuplicateStr
 function message(value: unknown, fallback: string) { return value !== null && typeof value === "object" && "error" in value && typeof value.error === "string" ? value.error : fallback; }
 function isInspection(value: unknown): value is { columns: string[]; mapping: ColumnMapping } { return value !== null && typeof value === "object" && "columns" in value && Array.isArray(value.columns) && value.columns.every((column: unknown) => typeof column === "string") && "mapping" in value && value.mapping !== null && typeof value.mapping === "object"; }
 function isPreview(value: unknown): value is TaskImportPreview { return value !== null && typeof value === "object" && "rows" in value && Array.isArray(value.rows) && "totalRows" in value && typeof value.totalRows === "number"; }
-function isResult(value: unknown): value is Result { return value !== null && typeof value === "object" && "importId" in value && typeof value.importId === "string" && "imported" in value && typeof value.imported === "number" && "replaced" in value && typeof value.replaced === "number"; }
+function isResult(value: unknown): value is Result { return value !== null && typeof value === "object" && "jobId" in value && typeof value.jobId === "string"; }

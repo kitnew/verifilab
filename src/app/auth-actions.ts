@@ -18,7 +18,7 @@ const accountSchema = z.object({
   username,
   password,
   projectId: z.string().min(1),
-  role: z.enum(["AUTHOR", "REVIEWER", "CURATOR"]),
+  role: z.enum(["AUTHOR", "REVIEWER", "CURATOR", "OPERATOR"]),
 });
 
 export async function login(_: AuthState, formData: FormData): Promise<AuthState> {
@@ -48,7 +48,7 @@ export async function guestLogin() {
 }
 
 export async function changeGuestRole(formData: FormData) {
-  const role = z.enum(["ADMIN", "AUTHOR", "REVIEWER", "CURATOR"]).safeParse(formData.get("role"));
+  const role = z.enum(["ADMIN", "AUTHOR", "REVIEWER", "CURATOR", "OPERATOR"]).safeParse(formData.get("role"));
   if (role.success) await switchGuestRole(role.data);
   redirect("/dashboard");
 }

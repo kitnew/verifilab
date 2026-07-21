@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/review";
 
 type Result = { error?: string };
-const roleSchema = z.enum(["ADMIN", "AUTHOR", "REVIEWER", "CURATOR"]);
+const roleSchema = z.enum(["ADMIN", "AUTHOR", "REVIEWER", "CURATOR", "OPERATOR"]);
 const assignmentSchema = z.object({
   authorId: z.string().min(1).nullable(),
   reviewerId: z.string().min(1).nullable(),

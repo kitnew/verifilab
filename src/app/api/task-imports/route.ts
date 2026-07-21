@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { createAsyncJob, executeAsyncJob } from "@/lib/async-job-service";
 import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { can } from "@/lib/review";
 import { columnMappingSchema, inspectTaskImport, MAX_TASK_IMPORT_BYTES, taskImportFormat } from "@/lib/task-import";
-import { confirmProjectTaskImport, previewProjectTaskImport, TaskImportError } from "@/lib/task-import-service";
+import { previewProjectTaskImport, TaskImportError } from "@/lib/task-import-service";
 
 export async function POST(request: Request) {
   if (!await getCurrentUser()) return Response.json({ error: "Authentication required." }, { status: 401 });
@@ -39,12 +41,11 @@ export async function POST(request: Request) {
     if (!actor || !can(actor.role, "CREATE_TASK")) return Response.json({ error: "You cannot import tasks into this project." }, { status: 403 });
     const strategy = form.get("duplicateStrategy");
     if (strategy !== "SKIP" && strategy !== "REPLACE" && strategy !== "CREATE_NEW") return Response.json({ error: "Choose a duplicate strategy." }, { status: 400 });
-    const result = await confirmProjectTaskImport({ projectId, filename: file.name, content, format, duplicateStrategy: strategy, mapping: parsedMapping.data, assignedAuthorId: actor.role === "AUTHOR" ? actor.id : undefined });
-    revalidatePath("/dashboard/imports");
-    revalidatePath("/dashboard/tasks");
-    revalidatePath(`/dashboard/projects/${projectId}`);
-    revalidatePath("/dashboard/activity");
-    return Response.json(result);
+    const payload = { projectId, filename: file.name, content, format, duplicateStrategy: strategy, mapping: parsedMapping.data, ...(actor.role === "AUTHOR" ? { assignedAuthorId: actor.id } : {}) };
+    const job = await createAsyncJob({ projectId, initiatorId: actor.id, type: "BULK_IMPORT", payload, inputSummary: `${file.name} (${format}, ${strategy.toLowerCase()})` });
+    if (!job.duplicate) after(() => executeAsyncJob(job.id));
+    revalidatePath("/dashboard/jobs");
+    return Response.json({ jobId: job.id }, { status: 202 });
   } catch (error) {
     if (error instanceof TaskImportError) return Response.json({ error: error.message }, { status: 400 });
     return Response.json({ error: "Could not process the task import." }, { status: 500 });

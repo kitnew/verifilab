@@ -26,15 +26,15 @@ export function DatasetReleaseForm({ datasetId, taskCount }: { datasetId: string
   return <form className="space-y-6" onSubmit={handleSubmit(async (values) => {
     setError("");
     const result = await createDatasetRelease(datasetId, values);
-    if (result.error || !result.releaseId) return setError(result.error ?? "Could not create the release.");
-    router.push(`/dashboard/datasets/${datasetId}/releases/${result.releaseId}`);
+    if (result.error || !result.jobId) return setError(result.error ?? "Could not queue the release.");
+    router.push(`/dashboard/jobs/${result.jobId}`);
   })}>
     <div className="grid gap-5 md:grid-cols-2"><Field label="Semantic version" error={errors.version?.message}><Input {...register("version")} placeholder="1.0.0" /></Field><Field label="Seed" error={errors.seed?.message}><Input {...register("seed")} placeholder="42" /></Field><Field className="md:col-span-2" label="Release notes" error={errors.notes?.message}><Textarea {...register("notes")} maxLength={2_000} placeholder="What changed in this release?" /></Field></div>
     <div className="grid gap-5 sm:grid-cols-3"><Field label="Train %" error={errors.trainPercentage?.message}><Input {...register("trainPercentage", { valueAsNumber: true })} min="0" max="100" step="1" type="number" /></Field><Field label="Validation %" error={errors.validationPercentage?.message}><Input {...register("validationPercentage", { valueAsNumber: true })} min="0" max="100" step="1" type="number" /></Field><Field label="Test %" error={errors.testPercentage?.message}><Input {...register("testPercentage", { valueAsNumber: true })} min="0" max="100" step="1" type="number" /></Field></div>
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-5"><h2 className="font-semibold">Split preview</h2>{preview ? <div className="mt-3 grid grid-cols-3 gap-3 text-center"><Preview label="Train" value={preview.train} /><Preview label="Validation" value={preview.validation} /><Preview label="Test" value={preview.test} /></div> : <p className="mt-2 text-sm text-red-700">Percentages must be non-negative integers totaling exactly 100%.</p>}<p className="mt-3 text-xs text-slate-500">{taskCount} current dataset task(s). Assignments are created only after server-side validation.</p></div>
     {taskCount === 0 && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">An empty dataset cannot produce a release.</p>}
     {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-    <Button disabled={isSubmitting || taskCount === 0 || !preview} type="submit">{isSubmitting ? "Creating…" : "Create immutable release"}</Button>
+    <Button disabled={isSubmitting || taskCount === 0 || !preview} type="submit">{isSubmitting ? "Queueing…" : "Create immutable release"}</Button>
   </form>;
 }
 

@@ -34,6 +34,23 @@ enum ProjectRole {
   AUTHOR
   REVIEWER
   CURATOR
+  OPERATOR
+}
+
+enum AsyncJobType {
+  BATCH_TASK_GENERATION
+  BULK_IMPORT
+  DATASET_RELEASE
+  ROLLOUT_EVALUATION
+  DATASET_QUALITY_SCAN
+}
+
+enum AsyncJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
 
 enum TaskPriority {
@@ -106,6 +123,7 @@ model Project {
   generationJobs   GenerationJob[]
   taskImports      TaskImport[]
   memberships      ProjectMembership[]
+  asyncJobs        AsyncJob[]
   guestWorkspaceId String?
   guestWorkspace   GuestWorkspace?     @relation(fields: [guestWorkspaceId], references: [id], onDelete: Cascade)
   createdAt        DateTime            @default(now())
@@ -126,6 +144,8 @@ model User {
   authoredTasks    Task[]              @relation("TaskAuthor")
   reviewedTasks    Task[]              @relation("TaskReviewer")
   sessions         Session[]
+  initiatedJobs    AsyncJob[]          @relation("AsyncJobInitiator")
+  cancelledJobs    AsyncJob[]          @relation("AsyncJobCanceller")
   guestWorkspaceId String?
   guestWorkspace   GuestWorkspace?     @relation(fields: [guestWorkspaceId], references: [id], onDelete: Cascade)
   createdAt        DateTime            @default(now())
@@ -165,6 +185,38 @@ model ProjectMembership {
 
   @@unique([projectId, userId])
   @@index([userId, role])
+}
+
+model AsyncJob {
+  id                      String         @id @default(cuid())
+  projectId               String
+  project                 Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  initiatorId             String?
+  initiator               User?          @relation("AsyncJobInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
+  type                    AsyncJobType
+  status                  AsyncJobStatus @default(QUEUED)
+  progress                Int            @default(0)
+  input                   Json
+  inputSummary            String
+  resultReference         Json?
+  safeErrorMessage        String?
+  retrySourceId           String?
+  retrySource             AsyncJob?      @relation("AsyncJobRetries", fields: [retrySourceId], references: [id], onDelete: SetNull)
+  retries                 AsyncJob[]     @relation("AsyncJobRetries")
+  idempotencyKey          String?        @unique
+  cancellationRequestedAt DateTime?
+  cancelledAt             DateTime?
+  cancelledById           String?
+  cancelledBy             User?          @relation("AsyncJobCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  startedAt               DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([projectId, createdAt])
+  @@index([projectId, status, type])
+  @@index([initiatorId, createdAt])
+  @@index([retrySourceId])
 }
 
 model TaskImport {

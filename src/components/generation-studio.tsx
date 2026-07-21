@@ -21,7 +21,7 @@ export function GenerationStudio({ projects, initialJobId, initialTasks = [] }: 
   const [count, setCount] = useState(10);
   const [difficulty, setDifficulty] = useState<"EASY" | "MEDIUM" | "HARD">("MEDIUM");
   const [seed, setSeed] = useState("verifilab-1");
-  const [jobId, setJobId] = useState(initialJobId);
+  const jobId = initialJobId;
   const [tasks, setTasks] = useState(initialTasks);
   const [selected, setSelected] = useState(() => new Set(initialTasks.filter((task) => !task.duplicate).map((task) => task.index)));
   const [message, setMessage] = useState("");
@@ -33,10 +33,8 @@ export function GenerationStudio({ projects, initialJobId, initialTasks = [] }: 
     setError(""); setMessage(""); setCancelled(false);
     startTransition(async () => {
       const result = await previewGeneration({ projectId, generatorType, count, difficulty, seed });
-      if (result.error || !result.jobId || !result.tasks) return setError(result.error ?? "Generation failed.");
-      setJobId(result.jobId);
-      setTasks(result.tasks);
-      setSelected(new Set(result.tasks.filter((task) => !task.duplicate).map((task) => task.index)));
+      if (result.error || !result.jobId) return setError(result.error ?? "Generation could not be queued.");
+      router.push(`/dashboard/jobs/${result.jobId}`);
     });
   }
 
@@ -78,7 +76,7 @@ export function GenerationStudio({ projects, initialJobId, initialTasks = [] }: 
       <div className="flex items-center gap-2 md:col-span-2 lg:col-span-5"><Button disabled={pending || !projectId} onClick={preview}>{pending && tasks.length === 0 ? "Generating…" : "Generate preview"}</Button><Link className={buttonVariants({ variant: "secondary" })} href="/dashboard/generation/history">View history</Link></div>
     </CardContent></Card>
 
-    {pending && <Card><CardContent className="py-8"><p className="mb-2 text-sm font-medium text-slate-700">Generating deterministic tasks…</p><progress className="h-2 w-full accent-indigo-600" max="100" value="50">50%</progress></CardContent></Card>}
+    {pending && <Card><CardContent className="py-8"><p className="text-sm font-medium text-slate-700">Queueing generation job…</p></CardContent></Card>}
     {(error || message) && <p aria-live="polite" className={`rounded-lg border px-4 py-3 text-sm ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{error || message}</p>}
 
     {!pending && tasks.length === 0 ? <Card className="border-dashed"><CardContent className="py-16 text-center"><h2 className="font-semibold text-slate-900">No preview yet</h2><p className="mt-1 text-sm text-slate-500">Choose settings and generate up to {MAX_BATCH_SIZE} draft candidates.</p></CardContent></Card> : tasks.length > 0 && <Card className="overflow-hidden"><CardHeader className="flex-row items-center justify-between gap-4"><div><h2 className="text-lg font-semibold text-slate-950">Preview</h2><p className="mt-1 text-sm text-slate-500">{tasks.length} generated · {tasks.filter((task) => task.duplicate).length} duplicate(s)</p></div><div className="flex gap-2"><Button variant="secondary" disabled={pending || cancelled || !jobId} onClick={cancel}>Cancel</Button><Button disabled={pending || cancelled || selected.size === 0} onClick={save}>Save {selected.size} as drafts</Button></div></CardHeader>
