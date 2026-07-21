@@ -8,8 +8,10 @@ import { getCurrentUser, getProjectActor } from "@/lib/auth";
 import { isDatasetEligible } from "@/lib/dataset";
 import { prisma } from "@/lib/prisma";
 import { can, canEditAssignedTask, canReviewAssignedTask, reviewTransition, type ReviewAction } from "@/lib/review";
-import { candidateSchema, projectSchema, reviewCommentSchema, storedVerifierSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
-import { verify, type VerificationResult } from "@/lib/verifier";
+import { candidateSchema, projectSchema, reviewCommentSchema, taskSchema, toTaskData, type ProjectInput, type TaskInput } from "@/lib/validation";
+import { createTaskRecord } from "@/lib/task-service";
+import { runVerificationRecord } from "@/lib/verification-service";
+import type { VerificationResult } from "@/lib/verifier";
 import { normalizeVerifierSnapshot, verifierChanged } from "@/lib/verifier-version";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -61,34 +63,12 @@ export async function createProject(input: ProjectInput): Promise<ActionResult> 
 export async function createTask(projectId: string, input: TaskInput): Promise<ActionResult> {
   const actor = await getProjectActor(projectId);
   if (!actor || !can(actor.role, "CREATE_TASK")) return { error: "You cannot create tasks in this project." };
-  const parsed = taskSchema.safeParse(input);
-  if (!parsed.success) return invalid(parsed.error);
-
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
-  if (!project) return { error: "Project not found." };
-
-  let task;
-  try {
-    const data = toTaskData(parsed.data);
-    task = await prisma.task.create({
-      data: {
-        projectId,
-        ...data,
-        ...(actor.role === "AUTHOR" ? { assignedAuthorId: actor.id, authorAssignedAt: new Date() } : {}),
-        verifierVersions: { create: { version: 1, verifierType: data.verifierType, verifierConfig: data.verifierConfig, changeSummary: "Initial version" } },
-        auditEvents: { create: [
-          { projectId, action: "TASK_CREATED", metadata: {} },
-          { projectId, action: "VERIFIER_VERSION_CREATED", metadata: { version: 1 } },
-        ] },
-      },
-    });
-  } catch {
-    return { error: "Could not create the task. Please try again." };
-  }
+  const created = await createTaskRecord(projectId, input, actor.role === "AUTHOR" ? actor.id : undefined);
+  if (!created.task) return { error: created.error, fieldErrors: created.fieldErrors };
 
   revalidatePath(`/dashboard/projects/${projectId}`);
   revalidatePath("/dashboard/activity");
-  redirect(`/dashboard/projects/${projectId}/tasks/${task.id}`);
+  redirect(`/dashboard/projects/${projectId}/tasks/${created.task.id}`);
 }
 
 export async function updateTask(taskId: string, projectId: string, input: TaskInput): Promise<ActionResult> {
@@ -279,41 +259,16 @@ export async function bulkTaskAction(input: unknown): Promise<BulkTaskResult> {
 export async function runVerification(taskId: string, candidate: string): Promise<{ error?: string; result?: VerificationResult }> {
   const parsedCandidate = candidateSchema.safeParse(candidate);
   if (!parsedCandidate.success) return { error: parsedCandidate.error.issues[0].message };
-
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: { id: true, projectId: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } },
-  });
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, verifierVersions: { orderBy: { version: "desc" }, take: 1 } } });
   if (!task) return { error: "Task not found." };
   if (!await getProjectActor(task.projectId)) return { error: "You cannot run verification for this project." };
-  const active = task.verifierVersions[0];
-  if (!active) return { error: "Task has no verifier version." };
-
-  const parsedVerifier = storedVerifierSchema.safeParse({ type: active.verifierType, config: active.verifierConfig });
-  if (!parsedVerifier.success) return { error: "This task has an invalid verifier configuration." };
-
-  const result = verify(parsedCandidate.data, parsedVerifier.data);
-  const details: Prisma.InputJsonObject = {
-    reward: result.reward,
-    details: result.details,
-    executionTimeMs: result.executionTimeMs,
-    ...(result.normalizedCandidate === undefined ? {} : { normalizedCandidate: result.normalizedCandidate }),
-    ...(result.validationErrors === undefined ? {} : { validationErrors: result.validationErrors as Prisma.InputJsonValue }),
-  };
-
-  try {
-    await prisma.$transaction([
-      prisma.verificationRun.create({ data: { taskId, verifierVersionId: active.id, candidate: parsedCandidate.data, passed: result.passed, details } }),
-      prisma.auditEvent.create({ data: { projectId: task.projectId, taskId, action: "VERIFICATION_EXECUTED", metadata: { passed: result.passed, reward: result.reward, executionTimeMs: result.executionTimeMs, verifierVersion: active.version } } }),
-    ]);
-  } catch {
-    return { error: "Verification ran, but the result could not be saved." };
-  }
+  const outcome = await runVerificationRecord(task.projectId, taskId, candidate, task);
+  if (!outcome.result) return { error: outcome.error };
 
   revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${task.id}`);
   revalidatePath(`/dashboard/projects/${task.projectId}`);
   revalidatePath("/dashboard/activity");
-  return { result };
+  return { result: outcome.result };
 }
 
 export async function restoreVerifierVersion(taskId: string, projectId: string, verifierVersionId: string): Promise<ActionResult> {

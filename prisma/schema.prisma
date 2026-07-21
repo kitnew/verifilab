@@ -124,6 +124,7 @@ model Project {
   taskImports      TaskImport[]
   memberships      ProjectMembership[]
   asyncJobs        AsyncJob[]
+  apiTokens        ApiToken[]
   guestWorkspaceId String?
   guestWorkspace   GuestWorkspace?     @relation(fields: [guestWorkspaceId], references: [id], onDelete: Cascade)
   createdAt        DateTime            @default(now())
@@ -146,6 +147,7 @@ model User {
   sessions         Session[]
   initiatedJobs    AsyncJob[]          @relation("AsyncJobInitiator")
   cancelledJobs    AsyncJob[]          @relation("AsyncJobCanceller")
+  createdApiTokens ApiToken[]
   guestWorkspaceId String?
   guestWorkspace   GuestWorkspace?     @relation(fields: [guestWorkspaceId], references: [id], onDelete: Cascade)
   createdAt        DateTime            @default(now())
@@ -185,6 +187,27 @@ model ProjectMembership {
 
   @@unique([projectId, userId])
   @@index([userId, role])
+}
+
+model ApiToken {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  prefix      String
+  tokenHash   String    @unique
+  scopes      Json
+  createdById String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+
+  @@index([projectId, createdAt])
+  @@index([projectId, revokedAt])
+  @@index([createdById])
 }
 
 model AsyncJob {

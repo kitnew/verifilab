@@ -34,6 +34,10 @@ const labels: Record<string, string> = {
   EVALUATION_RESULTS_RERUN: "Evaluation results rerun",
   EVALUATION_EXPORTED: "Evaluation exported",
   EVALUATION_BATCH_DELETED: "Evaluation batch deleted",
+  API_TOKEN_CREATED: "API token created",
+  API_TOKEN_RENAMED: "API token renamed",
+  API_TOKEN_REVOKED: "API token revoked",
+  API_TOKEN_AUTH_FAILED: "API token authentication failed",
 };
 
 export function auditLabel(action: string) {

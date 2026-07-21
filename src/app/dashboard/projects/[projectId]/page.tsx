@@ -26,7 +26,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       <Link href="/dashboard" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"><ChevronLeft className="mr-1 size-4" />Projects</Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div><p className="mb-1 text-sm font-semibold text-indigo-600">Project</p><h1 className="text-3xl font-bold tracking-tight text-slate-950">{project.name}</h1><p className="mt-2 max-w-2xl text-slate-500">{project.description || "No description"}</p></div>
-        {can(role, "CREATE_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/new`} className={buttonVariants()}><Plus className="mr-2 size-4" />New task</Link>}
+        <div className="flex gap-2">{role === "ADMIN" && <Link href={`/dashboard/projects/${projectId}/api`} className={buttonVariants({ variant: "secondary" })}>API settings</Link>}{can(role, "CREATE_TASK") && <Link href={`/dashboard/projects/${projectId}/tasks/new`} className={buttonVariants()}><Plus className="mr-2 size-4" />New task</Link>}</div>
       </div>
 
       {project.tasks.length === 0 ? (
